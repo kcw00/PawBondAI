@@ -1,0 +1,24 @@
+# Elasticsearch
+elasticsearch==8.11.0
+
+# Environment management
+python-dotenv==1.0.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.2
+
+# Google Cloud
+google-cloud-aiplatform==1.38.1
+google-cloud-storage==2.10.0
+
+# API clients
+requests==2.31.0
+
+# PubMed/Bio tools
+biopython==1.82
+
+# Development
+jupyter==1.0.0
+pytest==7.4.3
+black==23.12.1
