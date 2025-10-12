@@ -1,4 +1,4 @@
-from elasticsearch import Elasticsearch
+from elasticsearch import AsyncElasticsearch, NotFoundError
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 
@@ -6,40 +6,71 @@ settings = get_settings()
 logger = setup_logger(__name__)
 
 
-class ElasticsearchClient:
+class AsyncElasticsearchClient:
     def __init__(self):
-        self.client = Elasticsearch(
-            settings.elastic_endpoint, api_key=settings.elastic_api_key
-        )
-        logger.info("Elasticsearch client initialized")
+        # Create async client
+        if settings.elastic_cloud_id:
+            self.client = AsyncElasticsearch(
+                cloud_id=settings.elastic_cloud_id,
+                api_key=settings.elastic_api_key,
+                request_timeout=30
+            )
+        else:
+            self.client = AsyncElasticsearch(
+                hosts=[settings.elastic_endpoint],
+                api_key=settings.elastic_api_key,
+                request_timeout=30
+            )
+        logger.info("Async Elasticsearch client initialized")
 
-    def create_index(self, index_name: str, mappings: dict):
+    async def ping(self):
+        """Test connection"""
+        try:
+            if await self.client.ping():
+                logger.info("✅ Successfully connected to Elasticsearch")
+                info = await self.client.info()
+                logger.info(f"   Cluster: {info['cluster_name']}")
+                return True
+            else:
+                logger.warning("⚠️ Elasticsearch ping failed")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Elasticsearch connection error: {e}")
+            return False
+
+    async def create_index(self, index_name: str, mappings: dict):
         """Create an index with mappings"""
-        if not self.client.indices.exists(index=index_name):
-            self.client.indices.create(index=index_name, body=mappings)
+        exists = await self.client.indices.exists(index=index_name)
+        if not exists:
+            await self.client.indices.create(index=index_name, body=mappings)
             logger.info(f"Created index: {index_name}")
         else:
             logger.info(f"Index {index_name} already exists")
 
-    def index_document(self, index_name: str, document: dict, doc_id: str = None):
+    async def index_document(self, index_name: str, document: dict, doc_id: str = None):
         """Index a single document"""
-        return self.client.index(index=index_name, document=document, id=doc_id)
+        return await self.client.index(index=index_name, document=document, id=doc_id)
 
-    def search(self, index_name: str, query: dict):
+    async def search(self, index_name: str, query: dict):
         """Search documents"""
-        return self.client.search(index=index_name, body=query)
+        return await self.client.search(index=index_name, body=query)
 
-    def get_document(self, index_name: str, doc_id: str):
+    async def get_document(self, index_name: str, doc_id: str):
         """Get a document by ID"""
-        return self.client.get(index=index_name, id=doc_id)
+        return await self.client.get(index=index_name, id=doc_id)
 
-    def update_document(self, index_name: str, doc_id: str, document: dict):
+    async def update_document(self, index_name: str, doc_id: str, document: dict):
         """Update a document"""
-        return self.client.update(index=index_name, id=doc_id, body={"doc": document})
+        return await self.client.update(index=index_name, id=doc_id, body={"doc": document})
 
-    def delete_document(self, index_name: str, doc_id: str):
+    async def delete_document(self, index_name: str, doc_id: str):
         """Delete a document"""
-        return self.client.delete(index=index_name, id=doc_id)
+        return await self.client.delete(index=index_name, id=doc_id)
+
+    async def close(self):
+        """Close the client connection"""
+        await self.client.close()
 
 
-es_client = ElasticsearchClient()
+# Create singleton instance
+es_client = AsyncElasticsearchClient()

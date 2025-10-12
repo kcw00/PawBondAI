@@ -5,7 +5,7 @@ import uuid
 import time
 
 from app.models.schemas import Dog, DogCreate
-from app.services.elasticsearch_http_client import es_http_client as es_client
+from app.services.elasticsearch_client import es_client
 from app.services.storage_service import storage_service
 from app.core.config import get_settings
 from app.core.logger import setup_logger
@@ -108,13 +108,27 @@ async def list_dogs(limit: int = 10):
 
     dogs = []
     for hit in result["hits"]["hits"]:
-        dog_data = hit["_source"]
-        # Ensure medical_history is a list
-        if "medical_history" in dog_data and isinstance(dog_data["medical_history"], str):
-            dog_data["medical_history"] = (
-                [dog_data["medical_history"]] if dog_data["medical_history"] else []
-            )
-        dogs.append(Dog(**dog_data))
+        try:
+            dog_data = hit["_source"]
+
+            # Ensure medical_history is a list
+            if "medical_history" in dog_data and isinstance(dog_data["medical_history"], str):
+                dog_data["medical_history"] = (
+                    [dog_data["medical_history"]] if dog_data["medical_history"] else []
+                )
+
+            # Ensure created_at and updated_at are strings
+            if "created_at" in dog_data and not isinstance(dog_data["created_at"], str):
+                dog_data["created_at"] = str(dog_data["created_at"])
+            if "updated_at" in dog_data and not isinstance(dog_data["updated_at"], str):
+                dog_data["updated_at"] = str(dog_data["updated_at"])
+
+            dogs.append(Dog(**dog_data))
+        except Exception as e:
+            logger.error(f"Failed to parse dog document {hit.get('_id')}: {e}")
+            logger.debug(f"Dog data: {dog_data}")
+            # Skip invalid documents
+            continue
 
     return dogs
 
@@ -153,11 +167,28 @@ async def update_dog(dog_id: str, dog_update: DogCreate):
 @router.delete("/{dog_id}")
 async def delete_dog(dog_id: str):
     """Delete dog profile"""
+    from elasticsearch import NotFoundError
+
     try:
-        await es_client.delete_document(index_name=settings.dogs_index, doc_id=dog_id)
-        return {"message": "Dog deleted successfully"}
+        result = await es_client.delete_document(index_name=settings.dogs_index, doc_id=dog_id)
+
+        # Check the result - Elasticsearch returns a dict with 'result' key
+        if isinstance(result, dict):
+            es_result = result.get('result', '')
+            logger.info(f"Dog {dog_id} deletion result: {es_result}")
+
+            if es_result == 'deleted':
+                return {"message": "Dog deleted successfully", "dog_id": dog_id}
+            elif es_result == 'not_found':
+                raise HTTPException(status_code=404, detail=f"Dog not found: {dog_id}")
+
+        return {"message": "Dog deleted successfully", "dog_id": dog_id}
+
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Dog not found: {dog_id}")
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Dog not found: {str(e)}")
+        logger.error(f"Error deleting dog {dog_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete dog: {str(e)}")
 
 
 # ~~~~~worked! testing done by with postman.
@@ -165,7 +196,7 @@ async def delete_dog(dog_id: str):
 async def get_dog_history(dog_id: str):
     """Get medical history for a dog"""
     try:
-        result = es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
+        result = await es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
         return {
             "dog_id": dog_id,
             "medical_history": result["_source"].get("medical_history", []),
