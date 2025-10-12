@@ -1,21 +1,28 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 
-from app.services.elasticsearch_client import es_client
+from app.core.config import get_elasticsearch_client
 
 router = APIRouter()
+es_client = get_elasticsearch_client()
 
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint"""
     try:
-        # Check Elasticsearch connection
-        es_client.client.ping()
+        health = await es_client.cluster.health()
+
         return {
-            "status": "healthy",
-            "elasticsearch": "connected",
-            "timestamp": datetime.now().isoformat(),
+            "status": "success",
+            "message": "Connected to Elasticsearch",
+            "cluster_status": health["status"],
+            "number_of_nodes": health["number_of_nodes"],
+            "active_shards": health["active_shards"],
         }
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
+        status_code = getattr(e, "status_code", 500)
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"Error connecting to Elasticsearch: {str(e)}",
+        )

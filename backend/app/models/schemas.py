@@ -15,10 +15,12 @@ class DogBase(BaseModel):
     name: str
     breed: Optional[str] = None
     age: Optional[int] = None
-    weight: Optional[float] = None
+    weight_kg: Optional[float] = None
     sex: Optional[str] = None
-    intake_date: Optional[datetime] = None
-    rescue_organization: Optional[str] = None
+    rescue_date: Optional[str] = None
+    adoption_status: Optional[str] = None
+    behavioral_notes: Optional[str] = None
+    combined_profile: Optional[str] = None
 
 
 class DogCreate(DogBase):
@@ -26,11 +28,11 @@ class DogCreate(DogBase):
 
 
 class Dog(DogBase):
-    id: str
-    medical_history: List[str] = []
-    photos: List[str] = []
-    created_at: datetime
-    updated_at: datetime
+    dog_id: str
+    medical_history: Optional[List[str]] = None
+    photos: Optional[List[str]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     class Config:
         from_attributes = True
