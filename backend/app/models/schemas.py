@@ -10,6 +10,21 @@ class UrgencyLevel(str, Enum):
     ROUTINE = "routine"
 
 
+class Language(str, Enum):
+    ENGLISH = "en"
+    SPANISH = "es"
+    FRENCH = "fr"
+    GERMAN = "de"
+    ITALIAN = "it"
+    PORTUGUESE = "pt"
+    CHINESE = "zh"
+    JAPANESE = "ja"
+    KOREAN = "ko"
+    ARABIC = "ar"
+    RUSSIAN = "ru"
+    HINDI = "hi"
+
+
 # Dog Models
 class DogBase(BaseModel):
     name: str
@@ -27,7 +42,7 @@ class DogCreate(DogBase):
     pass
 
 
-class Dog(DogBase):
+class DogResponse(DogBase):
     dog_id: str
     medical_history: Optional[List[str]] = None
     photos: Optional[List[str]] = None
@@ -40,19 +55,23 @@ class Dog(DogBase):
 
 # Article Models
 class ArticleBase(BaseModel):
-    title: str
-    content: str
-    source: str
-    language: str = "en"
+    title: Optional[str] = None
+    content: Optional[str] = None
+    source: Optional[str] = None
+    language: Language = Language.ENGLISH
     tags: List[str] = []
 
 
-class Article(ArticleBase):
+class ArticleCreate(ArticleBase):
+    pass
+
+
+class ArticleResponse(ArticleBase):
     id: str
-    created_at: datetime
+    upload_date: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # Case Study Models
@@ -69,7 +88,7 @@ class CaseStudyBase(BaseModel):
     cost_estimate: Optional[float] = None
     rescue_organization: Optional[str] = None
     origin_country: Optional[str] = None
-    origin_language: Optional[str] = "en"
+    origin_language: Language = Language.ENGLISH
 
 
 class CaseStudyCreate(CaseStudyBase):
