@@ -43,7 +43,7 @@ class DogCreate(DogBase):
 
 
 class DogResponse(DogBase):
-    dog_id: str
+    id: str
     medical_history: Optional[List[str]] = None
     photos: Optional[List[str]] = None
     created_at: Optional[str] = None
@@ -71,33 +71,62 @@ class ArticleResponse(ArticleBase):
     upload_date: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Case Study Models
 class CaseStudyBase(BaseModel):
     title: str
-    description: str
     diagnosis: str
-    treatment: str
+    treatment_plan: str
     outcome: str
-    species: str = "dog"
-    breed: Optional[str] = None
-    age: Optional[int] = None
-    symptoms: List[str] = []
-    cost_estimate: Optional[float] = None
+    presenting_complaint: Optional[str] = None
+    clinical_history: Optional[str] = None
+    physical_examination: Optional[str] = None
+    diagnostic_tests: Optional[str] = None
+    follow_up: Optional[str] = None
+    learning_points: Optional[str] = None
+
+    # Patient info
+    patient_species: str = "canine"
+    patient_breed: Optional[str] = None
+    patient_age_years: Optional[int] = None
+    patient_age_months: Optional[int] = None
+    patient_age_category: Optional[str] = None
+    patient_sex: Optional[str] = None
+    patient_weight_kg: Optional[float] = None
+    patient_weight_category: Optional[str] = None
+    is_juvenile: bool = False
+    is_geriatric: bool = False
+
+    # Organization & Location
     rescue_organization: Optional[str] = None
-    origin_country: Optional[str] = None
-    origin_language: Language = Language.ENGLISH
+    organization_contact: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+
+    # Cost & Classification
+    estimated_cost: Optional[float] = None
+    cost_breakdown: Optional[str] = None
+    disease_category: Optional[str] = None
+    urgency_level: Optional[str] = None
+
+    # Metadata
+    tags: List[str] = []
+    references: Optional[str] = None
+    visibility: str = "public"
+    is_shareable: bool = True
+    date_published: Optional[str] = None
 
 
 class CaseStudyCreate(CaseStudyBase):
     pass
 
 
-class CaseStudy(CaseStudyBase):
+class CaseStudyResponse(CaseStudyBase):
     id: str
-    created_at: datetime
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     class Config:
         from_attributes = True
