@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 import time
 
-from app.models.schemas import Dog, DogCreate
+from app.models.schemas import DogResponse, DogCreate
 from app.services.elasticsearch_client import es_client
 from app.services.storage_service import storage_service
 from app.core.config import get_settings
@@ -17,7 +17,7 @@ logger = setup_logger(__name__)
 
 
 # ~~~~~worked! testing done by with postman.
-@router.post("", response_model=Dog)
+@router.post("", response_model=DogResponse)
 async def create_dog(dog: DogCreate):
     """Create a new dog profile"""
     logger.info(f"Received request to create dog: {dog.name}")
@@ -37,14 +37,14 @@ async def create_dog(dog: DogCreate):
     # Index directly instead of using background task
     try:
         result = await es_client.index_document(
-            index_name=settings.dogs_index, document=dog_dict, doc_id=dog_id
+            index_name=settings.dogs_index, document=dog_dict, id=dog_id
         )
         logger.info(f"Dog profile created and indexed with ID: {dog_id}")
         logger.debug(f"Indexing result: {result}")
     except Exception as e:
         logger.error(f"Failed to index dog profile {dog_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create dog profile: {str(e)}")
-    return Dog(**dog_dict)
+    return DogResponse(**dog_dict)
 
 
 def index_dog_profile(index_name: str, document: Dict[str, Any], doc_id: str):
@@ -55,7 +55,7 @@ def index_dog_profile(index_name: str, document: Dict[str, Any], doc_id: str):
     while retry_count < max_retries:
         try:
             # Try to index the document
-            es_client.index_document(index_name=index_name, document=document, doc_id=doc_id)
+            es_client.index_document(index_name=index_name, document=document, id=doc_id)
             logger.info(f"Dog profile indexed successfully: {doc_id}")
             return
         except Exception as e:
@@ -75,11 +75,11 @@ def index_dog_profile(index_name: str, document: Dict[str, Any], doc_id: str):
 
 # ~~~~~worked! testing done by with postman.
 # get age_display needed for frontend display, but not needed in backend db.
-@router.get("/{dog_id}", response_model=Dog)
+@router.get("/{dog_id}", response_model=DogResponse)
 async def get_dog(dog_id: str):
     """Get dog profile by ID"""
     try:
-        result = await es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
+        result = await es_client.get_document(index_name=settings.dogs_index, id=dog_id)
         dog_data = result["_source"]
 
         # Ensure medical_history is a list
@@ -88,23 +88,23 @@ async def get_dog(dog_id: str):
                 [dog_data["medical_history"]] if dog_data["medical_history"] else []
             )
 
-        return Dog(**dog_data)
+        return DogResponse(**dog_data)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Dog not found: {str(e)}")
 
 
 # ~~~~~worked! testing done by with postman.
 # get age_display needed for frontend display, but not needed in backend db.
-@router.get("", response_model=List[Dog])
+@router.get("", response_model=List[DogResponse])
 async def list_dogs(limit: int = 10):
     """List all dogs"""
-    query = {
+    body = {
         "query": {"match_all": {}},
         "size": limit,
         "sort": [{"created_at": {"order": "desc"}}],
     }
 
-    result = await es_client.search(index_name=settings.dogs_index, query=query)
+    result = await es_client.search(index_name=settings.dogs_index, body=body)
 
     dogs = []
     for hit in result["hits"]["hits"]:
@@ -123,7 +123,7 @@ async def list_dogs(limit: int = 10):
             if "updated_at" in dog_data and not isinstance(dog_data["updated_at"], str):
                 dog_data["updated_at"] = str(dog_data["updated_at"])
 
-            dogs.append(Dog(**dog_data))
+            dogs.append(DogResponse(**dog_data))
         except Exception as e:
             logger.error(f"Failed to parse dog document {hit.get('_id')}: {e}")
             logger.debug(f"Dog data: {dog_data}")
@@ -134,12 +134,12 @@ async def list_dogs(limit: int = 10):
 
 
 # ~~~~~worked! testing done by with postman.
-@router.put("/{dog_id}", response_model=Dog)
+@router.put("/{dog_id}", response_model=DogResponse)
 async def update_dog(dog_id: str, dog_update: DogCreate):
     """Update dog profile"""
     try:
         # Get existing dog
-        existing = await es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
+        existing = await es_client.get_document(index_name=settings.dogs_index, id=dog_id)
 
         # Update fields
         updated_dict = existing["_source"]
@@ -154,10 +154,10 @@ async def update_dog(dog_id: str, dog_update: DogCreate):
 
         # Save
         await es_client.update_document(
-            index_name=settings.dogs_index, doc_id=dog_id, document=updated_dict
+            index_name=settings.dogs_index, id=dog_id, document=updated_dict
         )
 
-        return Dog(**updated_dict)
+        return DogResponse(**updated_dict)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Dog not found: {str(e)}")
 
@@ -170,16 +170,16 @@ async def delete_dog(dog_id: str):
     from elasticsearch import NotFoundError
 
     try:
-        result = await es_client.delete_document(index_name=settings.dogs_index, doc_id=dog_id)
+        result = await es_client.delete_document(index_name=settings.dogs_index, id=dog_id)
 
         # Check the result - Elasticsearch returns a dict with 'result' key
         if isinstance(result, dict):
-            es_result = result.get('result', '')
+            es_result = result.get("result", "")
             logger.info(f"Dog {dog_id} deletion result: {es_result}")
 
-            if es_result == 'deleted':
+            if es_result == "deleted":
                 return {"message": "Dog deleted successfully", "dog_id": dog_id}
-            elif es_result == 'not_found':
+            elif es_result == "not_found":
                 raise HTTPException(status_code=404, detail=f"Dog not found: {dog_id}")
 
         return {"message": "Dog deleted successfully", "dog_id": dog_id}
@@ -196,7 +196,7 @@ async def delete_dog(dog_id: str):
 async def get_dog_history(dog_id: str):
     """Get medical history for a dog"""
     try:
-        result = await es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
+        result = await es_client.get_document(index_name=settings.dogs_index, id=dog_id)
         return {
             "dog_id": dog_id,
             "medical_history": result["_source"].get("medical_history", []),
@@ -220,13 +220,13 @@ async def upload_dog_photo(dog_id: str, file: UploadFile = File(...)):
             raise HTTPException(status_code=500, detail="Storage service not configured")
 
         # Update dog profile
-        dog = es_client.get_document(index_name=settings.dogs_index, doc_id=dog_id)
+        dog = es_client.get_document(index_name=settings.dogs_index, id=dog_id)
 
         photos = dog["_source"].get("photos", [])
         photos.append(image_url)
 
         es_client.update_document(
-            index_name=settings.dogs_index, doc_id=dog_id, document={"photos": photos}
+            index_name=settings.dogs_index, id=dog_id, document={"photos": photos}
         )
 
         return {"image_url": image_url}
