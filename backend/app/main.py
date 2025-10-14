@@ -26,7 +26,9 @@ api_v1_prefix = "/api/v1"
 app.include_router(routes.router, prefix=api_v1_prefix, tags=["health"])
 app.include_router(dogs.router, prefix=f"{api_v1_prefix}/dogs", tags=["dogs"])
 app.include_router(knowledge.router, prefix=f"{api_v1_prefix}/knowledge", tags=["knowledge"])
-app.include_router(case_studies.router, prefix=f"{api_v1_prefix}/case-studies", tags=["case-studies"])
+app.include_router(
+    case_studies.router, prefix=f"{api_v1_prefix}/case-studies", tags=["case-studies"]
+)
 
 
 @app.get("/")
