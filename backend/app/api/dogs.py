@@ -26,7 +26,7 @@ async def create_dog(dog: DogCreate):
     dog_dict = dog.model_dump()
     dog_dict.update(
         {
-            "dog_id": dog_id,
+            "id": dog_id,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "medical_history": [],
@@ -178,11 +178,11 @@ async def delete_dog(dog_id: str):
             logger.info(f"Dog {dog_id} deletion result: {es_result}")
 
             if es_result == "deleted":
-                return {"message": "Dog deleted successfully", "dog_id": dog_id}
+                return {"message": "Dog deleted successfully", "id": dog_id}
             elif es_result == "not_found":
                 raise HTTPException(status_code=404, detail=f"Dog not found: {dog_id}")
 
-        return {"message": "Dog deleted successfully", "dog_id": dog_id}
+        return {"message": "Dog deleted successfully", "id": dog_id}
 
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Dog not found: {dog_id}")
@@ -198,7 +198,7 @@ async def get_dog_history(dog_id: str):
     try:
         result = await es_client.get_document(index_name=settings.dogs_index, id=dog_id)
         return {
-            "dog_id": dog_id,
+            "id": dog_id,
             "medical_history": result["_source"].get("medical_history", []),
         }
     except Exception as e:
