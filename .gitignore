@@ -48,3 +48,9 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Credentials
+credentials/
+*.json
+# Ignore converted json files
+convert_json.py
