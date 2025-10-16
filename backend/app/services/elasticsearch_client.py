@@ -1,4 +1,4 @@
-from elasticsearch import AsyncElasticsearch, NotFoundError
+from elasticsearch.dsl import async_connections
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 
@@ -10,17 +10,18 @@ class AsyncElasticsearchClient:
     def __init__(self):
         # Create async client
         if settings.elastic_cloud_id:
-            self.client = AsyncElasticsearch(
+            self.client = async_connections.create_connection(
                 cloud_id=settings.elastic_cloud_id,
                 api_key=settings.elastic_api_key,
                 request_timeout=30,
             )
         else:
-            self.client = AsyncElasticsearch(
+            self.client = async_connections.create_connection(
                 hosts=[settings.elastic_endpoint],
                 api_key=settings.elastic_api_key,
                 request_timeout=30,
             )
+
         logger.info("Async Elasticsearch client initialized")
 
     async def ping(self):
@@ -52,8 +53,12 @@ class AsyncElasticsearchClient:
             logger.info(f"Index {index_name} already exists")
 
     async def index_document(self, index_name: str, document: dict, id: str = None):
-        """Index a single document"""
+        """Index a single document (compatible with DSL Document.save())"""
         return await self.client.index(index=index_name, document=document, id=id)
+
+    async def close(self):
+        """Close the async client connection"""
+        await self.client.close()
 
     async def search(self, index_name: str, body: dict):
         """Search documents"""
@@ -70,10 +75,6 @@ class AsyncElasticsearchClient:
     async def delete_document(self, index_name: str, id: str):
         """Delete a document"""
         return await self.client.delete(index=index_name, id=id)
-
-    async def close(self):
-        """Close the client connection"""
-        await self.client.close()
 
 
 # Create singleton instance
