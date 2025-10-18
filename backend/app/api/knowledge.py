@@ -4,9 +4,11 @@ from datetime import datetime
 import uuid
 
 from app.models.schemas import SearchRequest, SearchResult, ArticleResponse, ArticleCreate, Language
+from app.models.es_documents import KnowledgeArticle
 from app.services.elasticsearch_client import es_client
 from app.core.config import get_settings
 from app.core.logger import setup_logger
+from elasticsearch.dsl import AsyncSearch, Q
 
 settings = get_settings()
 router = APIRouter()
@@ -37,8 +39,9 @@ def es_doc_to_article(doc_id: str, source: dict) -> dict:
 # ~~~~~worked! testing done by with postman.
 @router.post("", response_model=ArticleResponse)
 async def create_article(article: ArticleCreate):
-    """Create a new veterinary knowledge article"""
+    """Create a new veterinary knowledge article using DSL"""
     logger.info(f"Creating article: {article.title}")
+
     # Generate a filename based on the title or use a default
     filename = f"{article.title.lower().replace(' ', '_') if article.title else 'untitled'}.txt"
 
@@ -48,33 +51,29 @@ async def create_article(article: ArticleCreate):
     # ID
     article_id = str(uuid.uuid4())
 
-    # Prepare the document for Elasticsearch
-    doc = {
-        "id": article_id,
-        "attachment.title": article.title,
-        "attachment.content_chunk": article.content,
-        "source": article.source,
-        "filename": filename,
-        "upload_date": current_time.isoformat(),  # Store as ISO format string in Elasticsearch
-        "tags": article.tags,
-        "language": article.language.value if article.language else Language.ENGLISH.value,
-    }
-
     try:
-        # Index the document
-        response = await es_client.index_document(
-            index_name=settings.vet_knowledge_index, document=doc, id=article_id
-        )
+        # Create DSL Document instance
+        doc = KnowledgeArticle(meta={"id": article_id})
+        doc.title = article.title
+        doc.content_chunk = article.content
+        doc.source = article.source
+        doc.filename = filename
+        doc.upload_date = current_time
+        doc.tags = article.tags
+        doc.language = article.language.value if article.language else Language.ENGLISH.value
 
-        # Return the response with the proper datetime object
+        # Save the document
+        await doc.save(using=es_client.client)
+
+        # Return the response
         return {
-            "id": response["_id"],
+            "id": article_id,
             "title": article.title,
             "content": article.content,
             "source": article.source,
             "language": article.language,
             "tags": article.tags,
-            "upload_date": current_time,  # Return as datetime object
+            "upload_date": current_time,
         }
 
     except Exception as e:
@@ -86,12 +85,20 @@ async def create_article(article: ArticleCreate):
 # ~~~~worked! testing done by with postman.
 @router.get("/{article_id}", response_model=ArticleResponse)
 async def get_article(article_id: str = Path(..., description="The ID of the article to retrieve")):
-    """Get article by ID"""
+    """Get article by ID using DSL"""
     try:
-        response = await es_client.get_document(
-            index_name=settings.vet_knowledge_index, id=article_id
-        )
-        return es_doc_to_article(response["_id"], response["_source"])
+        # Use DSL Document.get()
+        doc = await KnowledgeArticle.get(id=article_id, using=es_client.client)
+
+        return {
+            "id": article_id,
+            "title": doc.title,
+            "content": doc.content_chunk,
+            "source": doc.source,
+            "language": Language(doc.language) if doc.language else Language.ENGLISH,
+            "tags": doc.tags or [],
+            "upload_date": doc.upload_date,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Article not found: {str(e)}")
@@ -109,33 +116,41 @@ async def list_articles(
     language: Optional[Language] = Query(None, description="Filter by language"),
     tag: Optional[str] = Query(None, description="Filter by tag"),
 ):
-    """List all articles, optionally filter by language"""
-    # Build the query
-    query = {"bool": {"must": [{"match_all": {}}]}}
+    """List all articles using DSL, optionally filter by language"""
+    # Build search using AsyncSearch
+    s = AsyncSearch(using=es_client.client, index=settings.vet_knowledge_index)
+    s = s.query("match_all")
 
     # Add filters if provided
     if source:
-        query["bool"]["must"].append({"term": {"source": source}})
+        s = s.filter("term", source=source)
     if language:
-        query["bool"]["must"].append({"term": {"language": language.value}})
+        s = s.filter("term", language=language.value)
     if tag:
-        query["bool"]["must"].append({"term": {"tags": tag}})
+        s = s.filter("term", tags=tag)
+
+    # Sort and paginate
+    s = s.sort({"upload_date": {"order": "desc"}})
+    s = s[skip : skip + limit]
 
     try:
-        response = await es_client.search(
-            index_name=settings.vet_knowledge_index,
-            body={
-                "query": query,
-                "from": skip,
-                "size": limit,
-                "sort": [{"upload_date": {"order": "desc"}}],  # Sort by upload_date descending
-            },
-        )
+        # Execute async search
+        response = await s.execute()
 
-        # Convert Elasticsearch results to ArticleResponse objects
-        articles = [
-            es_doc_to_article(hit["_id"], hit["_source"]) for hit in response["hits"]["hits"]
-        ]
+        # Convert to ArticleResponse objects
+        articles = []
+        for hit in response:
+            articles.append(
+                {
+                    "id": hit.meta.id,
+                    "title": hit.title,
+                    "content": hit.content_chunk,
+                    "source": hit.source,
+                    "language": Language(hit.language) if hit.language else Language.ENGLISH,
+                    "tags": hit.tags or [],
+                    "upload_date": hit.upload_date,
+                }
+            )
 
         logger.info(f"Listed {len(articles)} articles (skip={skip}, limit={limit})")
 
@@ -151,45 +166,34 @@ async def update_article(
     article: ArticleCreate,
     article_id: str = Path(..., description="The ID of the article to update"),
 ):
-    """Update an article"""
+    """Update an article using DSL"""
     # Check if the article exists
     try:
-        existing = await es_client.get_document(
-            index_name=settings.vet_knowledge_index, id=article_id
-        )
+        doc = await KnowledgeArticle.get(id=article_id, using=es_client.client)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Article not found: {str(e)}")
 
-    # Get the existing upload_date or use current time if not available
-    existing_source = existing.get("_source", {})
-    existing_upload_date = existing_source.get("upload_date")
-
-    # Prepare the updated document
-    doc = {
-        "attachment.title": article.title,
-        "attachment.content_chunk": article.content,
-        "source": article.source,
-        "filename": existing_source.get("filename")
-        or f"{article.title.lower().replace(' ', '_') if article.title else 'untitled'}.txt",
-        "upload_date": existing_upload_date or datetime.now().isoformat(),
-        "tags": article.tags,
-        "language": article.language.value if article.language else Language.ENGLISH.value,
-        # Add an updated_at field to track when the article was last modified
-        "updated_at": datetime.now().isoformat(),
-    }
-
     try:
-        # Update the document
-        await es_client.update_document(
-            index_name=settings.vet_knowledge_index, document=doc, id=article_id
-        )
+        # Update fields
+        doc.title = article.title
+        doc.content_chunk = article.content
+        doc.source = article.source
+        doc.tags = article.tags
+        doc.language = article.language.value if article.language else Language.ENGLISH.value
+        doc.updated_at = datetime.now()
 
-        # Get the updated document
-        updated = await es_client.get_document(
-            index_name=settings.vet_knowledge_index, id=article_id
-        )
+        # Save the updated document
+        await doc.save(using=es_client.client)
 
-        return es_doc_to_article(updated["_id"], updated["_source"])
+        return {
+            "id": article_id,
+            "title": doc.title,
+            "content": doc.content_chunk,
+            "source": doc.source,
+            "language": article.language,
+            "tags": doc.tags,
+            "upload_date": doc.upload_date,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update article: {str(e)}")
 
@@ -200,26 +204,14 @@ async def update_article(
 async def delete_article(
     article_id: str = Path(..., description="The ID of the article to delete")
 ):
-    """Delete an article"""
+    """Delete an article using DSL"""
 
     try:
-        # Check if the article exists
-        es_client.get_document(index_name=settings.vet_knowledge_index, id=article_id)
+        # Get and delete the article
+        doc = await KnowledgeArticle.get(id=article_id, using=es_client.client)
+        await doc.delete(using=es_client.client)
 
-        # Delete the article
-        result = await es_client.delete_document(
-            index_name=settings.vet_knowledge_index, id=article_id
-        )
-
-        if isinstance(result, dict):
-            es_result = result.get("result", "")
-            logger.info(f"Article {article_id} deletion result: {es_result}")
-
-            if es_result == "deleted":
-                return {"message": "Article deleted successfully", "article_id": article_id}
-            elif es_result == "not_found":
-                raise HTTPException(status_code=404, detail=f"Article not found: {article_id}")
-
+        logger.info(f"Article {article_id} deleted successfully")
         return {"message": "Article deleted successfully", "article_id": article_id}
 
     except Exception as e:
@@ -232,51 +224,49 @@ async def delete_article(
 @router.get("/search", response_model=List[ArticleResponse])
 async def search_articles(
     word: str = Query(..., description="Search word or phrase"),
-    fields: str = Query(["attachment.content_chunk"], description="Fields to search"),
+    fields: List[str] = Query(["content_chunk"], description="Fields to search"),
     skip: int = Query(0, ge=0, description="Number of articles to skip"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of articles to return"),
     language: Optional[Language] = Query(None, description="Filter by language"),
     source: Optional[str] = Query(None, description="Filter by source"),
 ):
-    # Build the search query
-    query = {
-        "bool": {
-            "must": [
-                {
-                    "multi_match": {
-                        "query": word,
-                        "fields": fields,
-                        "fuzziness": "AUTO",
-                    }
-                }
-            ],
-            "filter": [],
-        }
-    }
+    """Search articles using DSL"""
+    # Build search using AsyncSearch
+    s = AsyncSearch(using=es_client.client, index=settings.vet_knowledge_index)
+
+    # Add multi-match query
+    s = s.query("multi_match", query=word, fields=fields, fuzziness="AUTO")
 
     # Add filters if provided
     if language:
-        query["bool"]["filter"].append({"term": {"language": language.value}})
+        s = s.filter("term", language=language.value)
     if source:
-        query["bool"]["filter"].append({"term": {"source": source}})
+        s = s.filter("term", source=source)
+
+    # Sort and paginate
+    s = s.sort({"upload_date": {"order": "desc"}})
+    s = s[skip : skip + limit]
 
     try:
-        response = await es_client.search(
-            index_name=settings.vet_knowledge_index,
-            body={
-                "query": query,
-                "from": skip,
-                "size": limit,
-                "sort": [{"upload_date": {"order": "desc"}}],  # Sort by upload_date descending
-            },
-        )
+        # Execute async search
+        response = await s.execute()
 
-        logger.info(f"Search for '{word}' returned {response['hits']['total']['value']} hits")
+        logger.info(f"Search for '{word}' returned {response.hits.total.value} hits")
 
-        # Convert Elasticsearch results to ArticleResponse objects
-        articles = [
-            es_doc_to_article(hit["_id"], hit["_source"]) for hit in response["hits"]["hits"]
-        ]
+        # Convert to ArticleResponse objects
+        articles = []
+        for hit in response:
+            articles.append(
+                {
+                    "id": hit.meta.id,
+                    "title": hit.title,
+                    "content": hit.content_chunk,
+                    "source": hit.source,
+                    "language": Language(hit.language) if hit.language else Language.ENGLISH,
+                    "tags": hit.tags or [],
+                    "upload_date": hit.upload_date,
+                }
+            )
 
         logger.info(f"Listed {len(articles)} articles (skip={skip}, limit={limit})")
 
