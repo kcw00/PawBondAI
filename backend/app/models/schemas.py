@@ -166,3 +166,144 @@ class SearchResult(BaseModel):
     content: str
     score: float
     source: Optional[str] = None
+
+
+# Application Models - Nested Structure
+class ApplicantInfoSchema(BaseModel):
+    """Applicant information schema"""
+    name: str
+    phone: str
+    email: str
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    home_address_full_text: Optional[str] = None
+    home_address_location: Optional[dict] = None  # {"lat": float, "lon": float}
+    social_media_platform: Optional[str] = None
+    social_media_handle: Optional[str] = None
+    occupation: Optional[str] = None
+    marital_status: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+
+
+class HouseholdInfoSchema(BaseModel):
+    """Household information schema"""
+    household_size: int = 1
+    members_description: Optional[str] = None
+    all_members_agree: Optional[str] = None
+    has_allergies: bool = False
+    allergy_details: Optional[str] = None
+
+
+class HousingInfoSchema(BaseModel):
+    """Housing information schema"""
+    type: str  # Apartment, Detached House, etc.
+    ownership_status: str  # Owned, Leased, etc.
+    size_sqm: Optional[int] = None
+    landlord_permission_granted: str = "Not_Applicable"  # Yes, No, Not_Applicable
+    photo_urls: List[str] = []
+    has_yard_or_balcony: bool = False
+
+
+class PetExperienceSchema(BaseModel):
+    """Pet experience schema"""
+    has_current_or_past_pets: bool = False
+    pet_history_details: Optional[str] = None
+    new_pet_introduction_plan: Optional[str] = None
+    ever_surrendered_pet: bool = False
+    surrender_reason: Optional[str] = None
+    volunteer_experience_details: Optional[str] = None
+
+
+class LongFormAnswersSchema(BaseModel):
+    """Long-form essay answers schema"""
+    motivation_for_this_animal: str
+    general_adoption_motivation: str
+    behavioral_issue_plan: str
+    life_changes_plan: str
+    opinion_on_off_leash: str
+    opinion_on_neutering: str
+
+
+class ApplicationMetaSchema(BaseModel):
+    """Application metadata schema"""
+    status: str = "Pending"  # Pending, Approved, Rejected, On-Hold
+    type: str  # Adoption or Foster
+    animal_name_applied_for: Optional[str] = None
+    animal_id_applied_for: Optional[str] = None
+    source: Optional[str] = None
+    is_kara_donor: bool = False
+    language: str = "ko"  # Default to Korean
+    submitted_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ApplicationCreate(BaseModel):
+    """Schema for creating a new application"""
+    applicant_info: ApplicantInfoSchema
+    household_info: HouseholdInfoSchema
+    housing_info: HousingInfoSchema
+    pet_experience: PetExperienceSchema
+    long_form_answers: LongFormAnswersSchema
+    application_meta: ApplicationMetaSchema
+
+
+class ApplicationResponse(BaseModel):
+    """Schema for application response"""
+    id: str
+    applicant_info: ApplicantInfoSchema
+    household_info: HouseholdInfoSchema
+    housing_info: HousingInfoSchema
+    pet_experience: PetExperienceSchema
+    long_form_answers: LongFormAnswersSchema
+    application_meta: ApplicationMetaSchema
+
+    class Config:
+        from_attributes = True
+
+
+# Matching Models
+class DimensionScore(BaseModel):
+    experience: float
+    housing: float
+    lifestyle: float
+    household: float
+    motivation: float
+
+
+class CompatibilityResult(BaseModel):
+    overall_score: float
+    dimension_scores: DimensionScore
+    recommendation: str  # approve, review, reject
+    concerns: List[str]
+    application_id: str
+    dog_id: str
+
+
+class RankedApplication(BaseModel):
+    application: ApplicationResponse
+    compatibility: CompatibilityResult
+
+
+class MatchingResponse(BaseModel):
+    dog_id: str
+    total_applications: int
+    ranked_applications: List[RankedApplication]
+
+
+# Intake Assessment Models
+class IntakeAssessmentRequest(BaseModel):
+    dog_name: str
+    breed: Optional[str] = None
+    approximate_age: Optional[int] = None
+    rescue_notes: Optional[str] = None
+
+
+class IntakeAssessmentResponse(BaseModel):
+    dog_id: str
+    visual_analysis: str  # Results from Gemini Vision
+    behavioral_assessment: str
+    medical_concerns: List[str]
+    recommended_actions: List[str]
+    urgency_level: str  # low, medium, high
+    created_at: datetime
