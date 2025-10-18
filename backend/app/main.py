@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import routes, dogs, knowledge, case_studies
+from app.api import routes, dogs, knowledge, case_studies, chat, applications
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -29,6 +29,10 @@ app.include_router(knowledge.router, prefix=f"{api_v1_prefix}/knowledge", tags=[
 app.include_router(
     case_studies.router, prefix=f"{api_v1_prefix}/case-studies", tags=["case-studies"]
 )
+app.include_router(
+    applications.router, prefix=f"{api_v1_prefix}/applications", tags=["applications"]
+)
+app.include_router(chat.router, prefix=f"{api_v1_prefix}/chat", tags=["chat"])
 
 
 @app.get("/")
