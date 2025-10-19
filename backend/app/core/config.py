@@ -27,10 +27,16 @@ class Settings(BaseSettings):
     gcp_region: str = "us-west1"
     vertex_ai_location: str = "us-west1"
 
+    # Google APIs
+    google_maps_api_key: str
+    google_api_key: Optional[str] = None  # For Gemini API
+
     # Index names
     dogs_index: str = "dogs"
     vet_knowledge_index: str = "veterinary_knowledge"
     case_studies_index: str = "case_studies"
+    applications_index: str = "applications"
+    outcomes_index: str = "rescue-adoption_outcomes"
 
     # Optional: Google Cloud Storage
     gcs_bucket_name: str = ""
