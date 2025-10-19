@@ -270,6 +270,49 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 
+# Rescue Adoption Outcome Models
+class OutcomeCreate(BaseModel):
+    dog_id: str
+    application_id: str
+    outcome: str  # "success", "returned", "foster_to_adopt", "ongoing"
+    outcome_reason: str
+    success_factors: Optional[str] = None
+    failure_factors: Optional[str] = None
+    adoption_date: Optional[datetime] = None
+    return_date: Optional[datetime] = None
+    adopter_satisfaction_score: Optional[int] = None
+    dog_difficulty_level: Optional[str] = "moderate"
+    adopter_experience_level: Optional[str] = "intermediate"
+    match_score: Optional[float] = None
+    created_by: str = "system"
+
+
+class OutcomeResponse(BaseModel):
+    outcome_id: str
+    dog_id: str
+    application_id: str
+    outcome: str
+    outcome_reason: Optional[str] = None
+    success_factors: Optional[str] = None
+    failure_factors: Optional[str] = None
+    adoption_date: Optional[str] = None
+    return_date: Optional[str] = None
+    days_until_return: Optional[int] = None
+    adopter_satisfaction_score: Optional[int] = None
+    dog_difficulty_level: Optional[str] = None
+    adopter_experience_level: Optional[str] = None
+    match_score_at_adoption: Optional[float] = None
+    created_at: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+class OutcomeStatsResponse(BaseModel):
+    total_outcomes: int
+    successful_adoptions: int
+    returned_adoptions: int
+    success_rate: float
+
+
 # Matching Models
 class DimensionScore(BaseModel):
     experience: float
@@ -317,44 +360,38 @@ class IntakeAssessmentResponse(BaseModel):
     created_at: datetime
 
 
-# Rescue Adoption Outcome Models
-class OutcomeCreate(BaseModel):
-    dog_id: str
-    application_id: str
-    outcome: str  # "success", "returned", "foster_to_adopt", "ongoing"
-    outcome_reason: str
-    success_factors: Optional[str] = None
-    failure_factors: Optional[str] = None
-    adoption_date: Optional[datetime] = None
-    return_date: Optional[datetime] = None
-    adopter_satisfaction_score: Optional[int] = None
-    dog_difficulty_level: Optional[str] = "moderate"
-    adopter_experience_level: Optional[str] = "intermediate"
-    match_score: Optional[float] = None
-    created_by: str = "system"
+# Sentiment Models
+class MotivationRequest(BaseModel):
+    motivation_text: str = Field(
+        ..., min_length=20, description="The adopter's motivation essay or text."
+    )
 
 
-class OutcomeResponse(BaseModel):
-    outcome_id: str
-    dog_id: str
-    application_id: str
-    outcome: str
-    outcome_reason: Optional[str] = None
-    success_factors: Optional[str] = None
-    failure_factors: Optional[str] = None
-    adoption_date: Optional[str] = None
-    return_date: Optional[str] = None
-    days_until_return: Optional[int] = None
-    adopter_satisfaction_score: Optional[int] = None
-    dog_difficulty_level: Optional[str] = None
-    adopter_experience_level: Optional[str] = None
-    match_score_at_adoption: Optional[float] = None
-    created_at: Optional[str] = None
-    created_by: Optional[str] = None
+class SentimentResponse(BaseModel):
+    score: float
+    magnitude: float
+    interpretation: str
 
 
-class OutcomeStatsResponse(BaseModel):
-    total_outcomes: int
-    successful_adoptions: int
-    returned_adoptions: int
-    success_rate: float
+class EntityResponse(BaseModel):
+    name: str
+    type: str
+    salience: float
+    mentions: List[str]
+
+
+class CommitmentResponse(BaseModel):
+    commitment_score: int
+    commitment_level: str
+    word_count: int
+    positive_indicators: int
+    red_flags: int
+
+
+class AnalysisResponse(BaseModel):
+    sentiment: SentimentResponse
+    key_entities: List[EntityResponse]
+    key_themes: List[str]
+    commitment_assessment: CommitmentResponse
+    text_length: int
+    recommendation: str
