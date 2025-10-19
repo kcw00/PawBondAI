@@ -246,3 +246,52 @@ class Application(AsyncDocument):
             self.application_meta.submitted_at = datetime.now()
         self.application_meta.updated_at = datetime.now()
         return super().save(**kwargs)
+
+
+class RescueAdoptionOutcome(AsyncDocument):
+    """
+    Elasticsearch Document model for rescue-adoption outcomes
+    Stores both SUCCESS and FAILURE cases for ML learning
+    """
+
+    # Core IDs
+    outcome_id = Keyword()
+    dog_id = Keyword()
+    application_id = Keyword()
+
+    # Outcome type
+    outcome = Keyword()  # "success", "returned", "foster_to_adopt", "ongoing"
+
+    # Semantic text fields with auto-embeddings via Elasticsearch inference
+    outcome_reason = Text()  # Will use semantic_text in index mapping
+    success_factors = Text()  # Factors that led to success
+    failure_factors = Text()  # Factors that led to failure/return
+    follow_up_notes = Text()  # General notes from follow-ups
+
+    # Dates
+    adoption_date = Date()
+    return_date = Date()
+    follow_up_date = Date()
+
+    # Metrics
+    days_until_return = Integer()  # null if success, number if returned
+    adopter_satisfaction_score = Integer()  # 1-10 rating
+
+    # Context for predictions
+    dog_difficulty_level = Keyword()  # "easy", "moderate", "challenging"
+    adopter_experience_level = Keyword()  # "beginner", "intermediate", "expert"
+    match_score_at_adoption = Float()  # Original compatibility score
+
+    # Metadata
+    created_at = Date()
+    created_by = Keyword()
+
+    class Index:
+        name = "rescue-adoption-outcomes"
+        # No settings for serverless - managed by Elasticsearch
+
+    def save(self, **kwargs):
+        """Override save to set timestamps"""
+        if not self.created_at:
+            self.created_at = datetime.now()
+        return super().save(**kwargs)

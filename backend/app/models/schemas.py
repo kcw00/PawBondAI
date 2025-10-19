@@ -171,6 +171,7 @@ class SearchResult(BaseModel):
 # Application Models - Nested Structure
 class ApplicantInfoSchema(BaseModel):
     """Applicant information schema"""
+
     name: str
     phone: str
     email: str
@@ -188,6 +189,7 @@ class ApplicantInfoSchema(BaseModel):
 
 class HouseholdInfoSchema(BaseModel):
     """Household information schema"""
+
     household_size: int = 1
     members_description: Optional[str] = None
     all_members_agree: Optional[str] = None
@@ -197,6 +199,7 @@ class HouseholdInfoSchema(BaseModel):
 
 class HousingInfoSchema(BaseModel):
     """Housing information schema"""
+
     type: str  # Apartment, Detached House, etc.
     ownership_status: str  # Owned, Leased, etc.
     size_sqm: Optional[int] = None
@@ -207,6 +210,7 @@ class HousingInfoSchema(BaseModel):
 
 class PetExperienceSchema(BaseModel):
     """Pet experience schema"""
+
     has_current_or_past_pets: bool = False
     pet_history_details: Optional[str] = None
     new_pet_introduction_plan: Optional[str] = None
@@ -217,6 +221,7 @@ class PetExperienceSchema(BaseModel):
 
 class LongFormAnswersSchema(BaseModel):
     """Long-form essay answers schema"""
+
     motivation_for_this_animal: str
     general_adoption_motivation: str
     behavioral_issue_plan: str
@@ -227,6 +232,7 @@ class LongFormAnswersSchema(BaseModel):
 
 class ApplicationMetaSchema(BaseModel):
     """Application metadata schema"""
+
     status: str = "Pending"  # Pending, Approved, Rejected, On-Hold
     type: str  # Adoption or Foster
     animal_name_applied_for: Optional[str] = None
@@ -240,6 +246,7 @@ class ApplicationMetaSchema(BaseModel):
 
 class ApplicationCreate(BaseModel):
     """Schema for creating a new application"""
+
     applicant_info: ApplicantInfoSchema
     household_info: HouseholdInfoSchema
     housing_info: HousingInfoSchema
@@ -250,6 +257,7 @@ class ApplicationCreate(BaseModel):
 
 class ApplicationResponse(BaseModel):
     """Schema for application response"""
+
     id: str
     applicant_info: ApplicantInfoSchema
     household_info: HouseholdInfoSchema
@@ -307,3 +315,46 @@ class IntakeAssessmentResponse(BaseModel):
     recommended_actions: List[str]
     urgency_level: str  # low, medium, high
     created_at: datetime
+
+
+# Rescue Adoption Outcome Models
+class OutcomeCreate(BaseModel):
+    dog_id: str
+    application_id: str
+    outcome: str  # "success", "returned", "foster_to_adopt", "ongoing"
+    outcome_reason: str
+    success_factors: Optional[str] = None
+    failure_factors: Optional[str] = None
+    adoption_date: Optional[datetime] = None
+    return_date: Optional[datetime] = None
+    adopter_satisfaction_score: Optional[int] = None
+    dog_difficulty_level: Optional[str] = "moderate"
+    adopter_experience_level: Optional[str] = "intermediate"
+    match_score: Optional[float] = None
+    created_by: str = "system"
+
+
+class OutcomeResponse(BaseModel):
+    outcome_id: str
+    dog_id: str
+    application_id: str
+    outcome: str
+    outcome_reason: Optional[str] = None
+    success_factors: Optional[str] = None
+    failure_factors: Optional[str] = None
+    adoption_date: Optional[str] = None
+    return_date: Optional[str] = None
+    days_until_return: Optional[int] = None
+    adopter_satisfaction_score: Optional[int] = None
+    dog_difficulty_level: Optional[str] = None
+    adopter_experience_level: Optional[str] = None
+    match_score_at_adoption: Optional[float] = None
+    created_at: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+class OutcomeStatsResponse(BaseModel):
+    total_outcomes: int
+    successful_adoptions: int
+    returned_adoptions: int
+    success_rate: float
