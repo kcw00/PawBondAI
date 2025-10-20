@@ -150,89 +150,37 @@ class Dog(AsyncDocument):
         return super().save(**kwargs)
 
 
-# Inner document classes for nested objects
-class ApplicantInfo(InnerDoc):
-    """Nested applicant information"""
-    name = Text(fields={"raw": Keyword()})
+class Application(AsyncDocument):
+    """Elasticsearch Document model for foster/adoption applications - FLAT structure"""
+
+    # Applicant basic info
+    applicant_name = Text(fields={"keyword": Keyword()})
     phone = Keyword()
     email = Keyword()
     gender = Keyword()
-    age = Integer()
-    home_address_full_text = Text()
-    home_address_location = GeoPoint()
-    social_media_platform = Keyword()
-    social_media_handle = Keyword()
-    occupation = Text()
-    marital_status = Keyword()
-    emergency_contact_relationship = Text()
-    emergency_contact_phone = Keyword()
+    address = Text()
 
+    # Housing info
+    housing_type = Keyword()  # "Apartment", "Townhouse", "House", etc.
+    has_yard = Boolean()
+    yard_size_sqm = Integer()
 
-class HouseholdInfo(InnerDoc):
-    """Nested household information"""
-    household_size = Integer()
-    members_description = Text()
-    all_members_agree = Text()
-    has_allergies = Boolean()
-    allergy_details = Text()
+    # Family info
+    family_members = Text()  # Description of family members
+    all_family_members_agree = Boolean()
 
+    # Pet experience
+    experience_level = Keyword()  # "Beginner", "Intermediate", "Experienced"
+    has_other_pets = Boolean()
+    other_pets_description = Text()
 
-class HousingInfo(InnerDoc):
-    """Nested housing information"""
-    type = Keyword()  # Apartment, Detached House, etc.
-    ownership_status = Keyword()  # Owned, Leased, etc.
-    size_sqm = Integer()
-    landlord_permission_granted = Keyword()  # Yes, No, Not_Applicable
-    photo_urls = Keyword(multi=True)
-    has_yard_or_balcony = Boolean()
+    # Long-form answer
+    motivation = Text(analyzer="standard")  # Main motivation essay
 
-
-class PetExperience(InnerDoc):
-    """Nested pet experience information"""
-    has_current_or_past_pets = Boolean()
-    pet_history_details = Text()
-    new_pet_introduction_plan = Text()
-    ever_surrendered_pet = Boolean()
-    surrender_reason = Text()
-    volunteer_experience_details = Text()
-
-
-class LongFormAnswers(InnerDoc):
-    """Nested long-form essay answers"""
-    motivation_for_this_animal = Text(analyzer="standard")
-    general_adoption_motivation = Text(analyzer="standard")
-    behavioral_issue_plan = Text(analyzer="standard")
-    life_changes_plan = Text(analyzer="standard")
-    opinion_on_off_leash = Text(analyzer="standard")
-    opinion_on_neutering = Text(analyzer="standard")
-
-
-class ApplicationMeta(InnerDoc):
-    """Nested application metadata"""
-    status = Keyword()  # Pending, Approved, Rejected, On-Hold
-    type = Keyword()  # Adoption or Foster
-    animal_name_applied_for = Keyword()
-    animal_id_applied_for = Keyword()
-    source = Keyword()  # How they heard about the animal
-    is_kara_donor = Boolean()
-    language = Keyword()  # e.g., "ko", "en"
+    # Application metadata
+    animal_applied_for = Keyword()  # e.g., "A77889-Scout"
+    status = Keyword()  # "Pending", "Approved", "Rejected"
     submitted_at = Date()
-    updated_at = Date()
-
-
-class Application(AsyncDocument):
-    """Elasticsearch Document model for foster/adoption applications with nested structure"""
-
-    # Nested objects
-    applicant_info = Object(ApplicantInfo)
-    household_info = Object(HouseholdInfo)
-    housing_info = Object(HousingInfo)
-    pet_experience = Object(PetExperience)
-    long_form_answers = Object(LongFormAnswers)
-    application_meta = Object(ApplicationMeta)
-
-    # Core field for hybrid search with dense vector
-    application_summary_embedding = DenseVector(dims=768, index=True, similarity="cosine")
 
     class Index:
         name = "applications"
@@ -240,11 +188,8 @@ class Application(AsyncDocument):
 
     def save(self, **kwargs):
         """Override save to set timestamps"""
-        if not self.application_meta:
-            self.application_meta = ApplicationMeta()
-        if not self.application_meta.submitted_at:
-            self.application_meta.submitted_at = datetime.now()
-        self.application_meta.updated_at = datetime.now()
+        if not self.submitted_at:
+            self.submitted_at = datetime.now()
         return super().save(**kwargs)
 
 

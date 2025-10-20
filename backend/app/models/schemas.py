@@ -244,27 +244,73 @@ class ApplicationMetaSchema(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+# FLAT APPLICATION SCHEMA (matches current ES mapping)
 class ApplicationCreate(BaseModel):
-    """Schema for creating a new application"""
+    """Schema for creating a new application - FLAT structure"""
 
-    applicant_info: ApplicantInfoSchema
-    household_info: HouseholdInfoSchema
-    housing_info: HousingInfoSchema
-    pet_experience: PetExperienceSchema
-    long_form_answers: LongFormAnswersSchema
-    application_meta: ApplicationMetaSchema
+    # Applicant basic info
+    applicant_name: str
+    phone: str
+    email: str
+    gender: Optional[str] = None
+    address: Optional[str] = None
+
+    # Housing info
+    housing_type: str  # "Apartment", "Townhouse", "House", etc.
+    has_yard: bool = False
+    yard_size_sqm: Optional[int] = None
+
+    # Family info
+    family_members: Optional[str] = None  # Description of family members
+    all_family_members_agree: bool = True
+
+    # Pet experience
+    experience_level: str  # "Beginner", "Intermediate", "Experienced"
+    has_other_pets: bool = False
+    other_pets_description: Optional[str] = None
+
+    # Long-form answer
+    motivation: str  # Main motivation essay
+
+    # Application metadata
+    animal_applied_for: Optional[str] = None  # e.g., "A77889-Scout"
+    status: str = "Pending"  # "Pending", "Approved", "Rejected"
+    submitted_at: Optional[datetime] = None
 
 
 class ApplicationResponse(BaseModel):
-    """Schema for application response"""
+    """Schema for application response - FLAT structure"""
 
     id: str
-    applicant_info: ApplicantInfoSchema
-    household_info: HouseholdInfoSchema
-    housing_info: HousingInfoSchema
-    pet_experience: PetExperienceSchema
-    long_form_answers: LongFormAnswersSchema
-    application_meta: ApplicationMetaSchema
+
+    # Applicant basic info
+    applicant_name: str
+    phone: str
+    email: str
+    gender: Optional[str] = None
+    address: Optional[str] = None
+
+    # Housing info
+    housing_type: str
+    has_yard: bool
+    yard_size_sqm: Optional[int] = None
+
+    # Family info
+    family_members: Optional[str] = None
+    all_family_members_agree: bool
+
+    # Pet experience
+    experience_level: str
+    has_other_pets: bool
+    other_pets_description: Optional[str] = None
+
+    # Long-form answer
+    motivation: str
+
+    # Application metadata
+    animal_applied_for: Optional[str] = None
+    status: str
+    submitted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
