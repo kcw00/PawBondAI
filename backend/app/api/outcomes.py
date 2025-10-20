@@ -253,7 +253,7 @@ async def search_similar_outcomes(
     limit: int = Body(5, embed=True),
 ):
     """
-    Semantic search for similar outcomes using AsyncSearch
+    Semantic search for similar outcomes using ES inference endpoint
     Used for prediction and pattern matching
 
     Args:
@@ -270,9 +270,9 @@ async def search_similar_outcomes(
             search_field = "failure_factors"
             filter_outcome = "returned"
 
-        # Use AsyncSearch with match query
+        # Use AsyncSearch with semantic query (uses ES inference endpoint)
         s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
-        s = s.query("match", **{search_field: query})
+        s = s.query("semantic", field=search_field, query=query)
         s = s.filter("term", outcome=filter_outcome)
         s = s[0:limit]
 

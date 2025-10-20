@@ -430,3 +430,62 @@ async def create_intake_assessment(
         raise HTTPException(
             status_code=500, detail=f"Failed to create intake assessment: {str(e)}"
         )
+
+
+# Semantic Search Endpoint
+@router.post("/search", response_model=List[DogResponse])
+async def search_dogs_semantic(
+    query: str = Body(..., embed=True),
+    field: str = Body("combined_profile", embed=True),
+    limit: int = Body(10, embed=True, ge=1, le=100),
+):
+    """
+    Semantic search for dogs using ES inference endpoint.
+    Searches across behavioral_notes, combined_profile, or medical_history using embeddings.
+
+    Args:
+        query: Natural language search query
+        field: Field to search (combined_profile, behavioral_notes, medical_history)
+        limit: Number of results to return
+    """
+    try:
+        # Validate field
+        valid_fields = ["combined_profile", "behavioral_notes", "medical_history"]
+        if field not in valid_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid field. Must be one of: {', '.join(valid_fields)}"
+            )
+
+        # Build semantic search using AsyncSearch
+        s = AsyncSearch(using=es_client.client, index="dogs")
+        s = s.query("semantic", field=field, query=query)
+        s = s[0:limit]
+
+        response = await s.execute()
+
+        dogs = []
+        for hit in response:
+            dogs.append(DogResponse(
+                id=hit.meta.id,
+                name=hit.name,
+                breed=hit.breed,
+                age=hit.age,
+                weight_kg=hit.weight_kg if hasattr(hit, 'weight_kg') else None,
+                sex=hit.sex,
+                rescue_date=hit.rescue_date if hasattr(hit, 'rescue_date') else None,
+                adoption_status=hit.adoption_status if hasattr(hit, 'adoption_status') else None,
+                behavioral_notes=hit.behavioral_notes if hasattr(hit, 'behavioral_notes') else None,
+                medical_history=hit.medical_history if hasattr(hit, 'medical_history') else [],
+                combined_profile=hit.combined_profile if hasattr(hit, 'combined_profile') else None,
+                photos=hit.photos if hasattr(hit, 'photos') else [],
+                created_at=hit.created_at if hasattr(hit, 'created_at') else None,
+                updated_at=hit.updated_at if hasattr(hit, 'updated_at') else None,
+            ))
+
+        logger.info(f"Semantic search for '{query}' on field '{field}' returned {len(dogs)} dogs")
+        return dogs
+
+    except Exception as e:
+        logger.error(f"Error in semantic search: {e}")
+        raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
