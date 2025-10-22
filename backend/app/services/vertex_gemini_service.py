@@ -273,24 +273,68 @@ RULES:
 
     async def detect_intent(self, message: str) -> Dict[str, Any]:
         try:
-            prompt = f"""Analyze this user message and determine the intent.
+            prompt = f"""Analyze this user message and determine the intent and extract any structured filters.
 
 User message: "{message}"
 
-Respond with JSON only:
+Respond with ONLY valid JSON (no markdown fences):
 {{
   "type": "find_adopters" | "analyze_application" | "general",
-  "filters": {{}}
+  "filters": {{
+    "has_yard": true|false|null,
+    "yard_size_min": number|null,
+    "experience_levels": ["First-time owner", "Some experience", "Experienced", "Professional (Vet/Trainer)"]|null,
+    "housing_types": ["House", "Apartment", "Townhouse", "Condo"]|null,
+    "has_other_pets": true|false|null,
+    "behavioral_keywords": ["anxious", "calm", "energetic", "shy", "friendly"]|null
+  }}
 }}
+
+RULES:
+- type: "find_adopters" if searching for adopters/applicants, "analyze_application" if analyzing specific application text, "general" otherwise
+- has_yard: true if query mentions "yard", "garden", "outdoor space", "large property"; false if "no yard", "apartment"; null otherwise
+- yard_size_min: extract minimum square meters if mentioned (convert: small=50, medium=150, large=300); null otherwise
+- experience_levels: extract if query mentions "experienced", "first-time", "professional", "novice", etc.; null otherwise
+- housing_types: extract if query specifies house type; null otherwise
+- has_other_pets: true if "multi-pet", "other pets", "other dogs/cats"; false if "no other pets"; null otherwise
+- behavioral_keywords: extract keywords related to dog behavior/personality that adopter should handle (anxious, aggressive, shy, energetic, etc.)
+
+Examples:
+- "Find experienced adopters with large yards" -> {{"type": "find_adopters", "filters": {{"experience_levels": ["Experienced", "Professional (Vet/Trainer)"], "yard_size_min": 300}}}}
+- "Find adopters good with anxious dogs" -> {{"type": "find_adopters", "filters": {{"behavioral_keywords": ["anxious"]}}}}
+- "Analyze this application" -> {{"type": "analyze_application", "filters": {{}}}}
 """
             response = await self.client.aio.models.generate_content(
                 model=self.model_id,
                 contents=prompt,
             )
-            txt = (response.text or "").lower()
-            if "find_adopters" in txt:
+            response_text = (response.text or "").strip()
+
+            # Clean markdown fences if present
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(lines[1:-1]).strip()
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+            # Parse JSON response
+            result = json.loads(response_text)
+
+            # Validate and set defaults
+            if "type" not in result:
+                result["type"] = "general"
+            if "filters" not in result:
+                result["filters"] = {}
+
+            logger.info(f"Intent detected: {result['type']}, filters: {result['filters']}")
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing error in detect_intent: {e}")
+            # Fallback to simple keyword detection
+            message_lower = message.lower()
+            if any(word in message_lower for word in ["find", "search", "show me", "get me", "adopters", "applicants"]):
                 return {"type": "find_adopters", "filters": {}}
-            if "analyze_application" in txt or "analyze" in txt:
+            elif any(word in message_lower for word in ["analyze", "review", "evaluate", "application"]):
                 return {"type": "analyze_application", "filters": {}}
             return {"type": "general", "filters": {}}
         except Exception as e:
