@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, Dict, Any, List, Literal, TypedDict
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -25,6 +25,18 @@ class Language(str, Enum):
     HINDI = "hi"
 
 
+# Medical Event Model
+class MedicalEvent(BaseModel):
+    date: Optional[str] = None
+    event_type: str  # vaccination, surgery, diagnosis, treatment, checkup, injury, other
+    condition: str
+    treatment: Optional[str] = None
+    severity: str  # mild, moderate, severe
+    outcome: str  # resolved, ongoing, improved, worsened
+    description: Optional[str] = None
+    location: Optional[str] = None
+
+
 # Dog Models
 class DogBase(BaseModel):
     name: str
@@ -39,12 +51,18 @@ class DogBase(BaseModel):
 
 
 class DogCreate(DogBase):
-    pass
+    medical_history: Optional[str] = None  # Free-text medical history for AI extraction
 
 
 class DogResponse(DogBase):
     id: str
-    medical_history: Optional[List[str]] = None
+    medical_history: Optional[str] = None  # Free-text medical history
+    medical_events: Optional[List[MedicalEvent]] = None
+    past_conditions: Optional[List[str]] = None
+    active_treatments: Optional[List[str]] = None
+    severity_score: Optional[int] = None
+    adoption_readiness: Optional[str] = None  # ready, needs_treatment, long_term_care
+    medical_document_ids: Optional[List[str]] = None
     photos: Optional[List[str]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -168,82 +186,6 @@ class SearchResult(BaseModel):
     source: Optional[str] = None
 
 
-# Application Models - Nested Structure
-class ApplicantInfoSchema(BaseModel):
-    """Applicant information schema"""
-
-    name: str
-    phone: str
-    email: str
-    gender: Optional[str] = None
-    age: Optional[int] = None
-    home_address_full_text: Optional[str] = None
-    home_address_location: Optional[dict] = None  # {"lat": float, "lon": float}
-    social_media_platform: Optional[str] = None
-    social_media_handle: Optional[str] = None
-    occupation: Optional[str] = None
-    marital_status: Optional[str] = None
-    emergency_contact_relationship: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-
-
-class HouseholdInfoSchema(BaseModel):
-    """Household information schema"""
-
-    household_size: int = 1
-    members_description: Optional[str] = None
-    all_members_agree: Optional[str] = None
-    has_allergies: bool = False
-    allergy_details: Optional[str] = None
-
-
-class HousingInfoSchema(BaseModel):
-    """Housing information schema"""
-
-    type: str  # Apartment, Detached House, etc.
-    ownership_status: str  # Owned, Leased, etc.
-    size_sqm: Optional[int] = None
-    landlord_permission_granted: str = "Not_Applicable"  # Yes, No, Not_Applicable
-    photo_urls: List[str] = []
-    has_yard_or_balcony: bool = False
-
-
-class PetExperienceSchema(BaseModel):
-    """Pet experience schema"""
-
-    has_current_or_past_pets: bool = False
-    pet_history_details: Optional[str] = None
-    new_pet_introduction_plan: Optional[str] = None
-    ever_surrendered_pet: bool = False
-    surrender_reason: Optional[str] = None
-    volunteer_experience_details: Optional[str] = None
-
-
-class LongFormAnswersSchema(BaseModel):
-    """Long-form essay answers schema"""
-
-    motivation_for_this_animal: str
-    general_adoption_motivation: str
-    behavioral_issue_plan: str
-    life_changes_plan: str
-    opinion_on_off_leash: str
-    opinion_on_neutering: str
-
-
-class ApplicationMetaSchema(BaseModel):
-    """Application metadata schema"""
-
-    status: str = "Pending"  # Pending, Approved, Rejected, On-Hold
-    type: str  # Adoption or Foster
-    animal_name_applied_for: Optional[str] = None
-    animal_id_applied_for: Optional[str] = None
-    source: Optional[str] = None
-    is_kara_donor: bool = False
-    language: str = "ko"  # Default to Korean
-    submitted_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
 # FLAT APPLICATION SCHEMA (matches current ES mapping)
 class ApplicationCreate(BaseModel):
     """Schema for creating a new application - FLAT structure"""
@@ -314,6 +256,12 @@ class ApplicationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+        @classmethod
+        def from_es_hit(cls, hit):
+            doc_id = hit.meta.id
+            data = {key: getattr(hit, key, None) for key in cls.model_fields if key != "id"}
+            return cls(id=doc_id, **data)
 
 
 # Rescue Adoption Outcome Models
@@ -406,6 +354,24 @@ class IntakeAssessmentResponse(BaseModel):
     created_at: datetime
 
 
+# Bulk Upload Models
+class BulkDogUpload(BaseModel):
+    name: str
+    breed: Optional[str] = None
+    age: Optional[int] = None
+    medical_history: Optional[str] = None
+    weight_kg: Optional[float] = None
+    sex: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    total_processed: int
+    successful: int
+    failed: int
+    dog_ids: List[str]
+    errors: List[Dict[str, Any]]
+
+
 # Sentiment Models
 class MotivationRequest(BaseModel):
     motivation_text: str = Field(
@@ -434,6 +400,7 @@ class CommitmentResponse(BaseModel):
     red_flags: int
 
 
+# Analytics Models
 class AnalysisResponse(BaseModel):
     sentiment: SentimentResponse
     key_entities: List[EntityResponse]
@@ -441,3 +408,42 @@ class AnalysisResponse(BaseModel):
     commitment_assessment: CommitmentResponse
     text_length: int
     recommendation: str
+
+
+class PredictionRequest(BaseModel):
+    adopter_experience: str  # "beginner", "intermediate", "expert"
+    dog_difficulty: str  # "easy", "moderate", "challenging"
+    match_score: float  # 0.0 to 1.0
+
+
+# Chat Models
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[Dict[str, Any]] = None
+
+
+class AnalyzeApplicationRequest(BaseModel):
+    application_text: str
+
+
+# Medical Extraction Models
+class MedicalEvent(TypedDict):
+    date: Optional[str]
+    event_type: Literal[
+        "vaccination", "surgery", "diagnosis", "treatment", "checkup", "injury", "other"
+    ]
+    condition: str
+    treatment: Optional[str]
+    severity: Literal["mild", "moderate", "severe"]
+    outcome: Literal["resolved", "ongoing", "improved", "worsened"]
+    description: str
+    location: Optional[str]
+
+
+class ExtractedMedicalData(TypedDict):
+    medical_events: List[MedicalEvent]
+    past_conditions: List[str]
+    active_treatments: List[str]
+    severity_score: int
+    adoption_readiness: Literal["ready", "needs_treatment", "long_term_care"]
+    medical_summary: str
