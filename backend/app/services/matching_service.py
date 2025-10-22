@@ -86,8 +86,8 @@ class MatchingService:
         Uses both success and failure patterns
         """
         # Get dog and application data
-        dog = await es_service.get_document(IndexNames.DOGS, dog_id)
-        application = await es_service.get_document(IndexNames.APPLICATIONS, application_id)
+        dog = await es_service.get_document(settings.dogs_index, dog_id)
+        application = await es_service.get_document(settings.applications_index, application_id)
 
         # Build search query
         search_text = (
