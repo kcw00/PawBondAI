@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Body
 from typing import List, Dict, Any
 from datetime import datetime
 import uuid
@@ -13,15 +13,21 @@ from app.models.schemas import (
     ApplicationResponse,
     IntakeAssessmentRequest,
     IntakeAssessmentResponse,
+    BulkDogUpload,
+    BulkUploadResponse,
+    MedicalEvent,
 )
 from app.services.elasticsearch_client import es_client
 from app.services.storage_service import storage_service
 from app.services.compatibility_service import compatibility_service
-from app.services.vertex_ai_service import vertex_ai_service
+from app.services.vertex_gemini_service import vertex_gemini_service
+from app.services.medical_extraction_service import medical_extraction_service
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 from app.models.es_documents import Dog
 from elasticsearch.dsl import AsyncSearch
+import csv
+import io
 
 
 settings = get_settings()
@@ -31,7 +37,20 @@ logger = setup_logger(__name__)
 
 @router.post("", response_model=DogResponse)
 async def create_dog(dog: DogCreate):
-    """Create a new dog profile using AsyncDocument"""
+    """
+    Create a new dog profile with AI-powered medical extraction
+
+    User provides:
+    - Basic info (name, breed, age)
+    - Medical history as free text (optional)
+
+    AI automatically extracts:
+    - Medical events timeline
+    - Past conditions vs current conditions
+    - Active treatments
+    - Severity score
+    - Adoption readiness status
+    """
     logger.info(f"Received request to create dog: {dog.name}")
     dog_id = str(uuid.uuid4())
 
@@ -39,7 +58,7 @@ async def create_dog(dog: DogCreate):
         # Create AsyncDocument instance
         doc = Dog(meta={'id': dog_id})
 
-        # Set fields from request
+        # Set basic fields from request
         doc.name = dog.name
         doc.breed = dog.breed
         doc.age = dog.age
@@ -50,14 +69,44 @@ async def create_dog(dog: DogCreate):
         doc.behavioral_notes = dog.behavioral_notes
         doc.combined_profile = dog.combined_profile
 
-        # Initialize empty arrays
-        doc.medical_history = []
+        # Initialize arrays
         doc.photos = []
+        doc.medical_document_ids = []
+
+        # AI-powered medical extraction
+        if dog.medical_history and dog.medical_history.strip():
+            logger.info(f"Extracting medical data for {dog.name}")
+            extracted = await medical_extraction_service.extract_medical_data(
+                dog.medical_history, dog.name
+            )
+
+            # Store original text
+            doc.medical_history = dog.medical_history
+
+            # Store extracted structured data
+            doc.medical_events = extracted.get("medical_events", [])
+            doc.past_conditions = extracted.get("past_conditions", [])
+            doc.active_treatments = extracted.get("active_treatments", [])
+            doc.severity_score = extracted.get("severity_score", 0)
+            doc.adoption_readiness = extracted.get("adoption_readiness", "ready")
+
+            logger.info(f"Medical extraction complete: {doc.adoption_readiness}, severity {doc.severity_score}")
+        else:
+            # No medical history - set healthy defaults
+            doc.medical_history = None
+            doc.medical_events = []
+            doc.past_conditions = []
+            doc.active_treatments = []
+            doc.severity_score = 0
+            doc.adoption_readiness = "ready"
 
         # Save to Elasticsearch (timestamps set automatically)
         await doc.save(using=es_client.client)
 
         logger.info(f"Dog profile created and indexed with ID: {dog_id}")
+
+        # Convert medical_events to MedicalEvent objects for response
+        medical_events_response = [MedicalEvent(**event) for event in (doc.medical_events or [])]
 
         return DogResponse(
             id=dog_id,
@@ -70,8 +119,14 @@ async def create_dog(dog: DogCreate):
             adoption_status=dog.adoption_status,
             behavioral_notes=dog.behavioral_notes,
             combined_profile=dog.combined_profile,
-            medical_history=[],
-            photos=[],
+            medical_history=doc.medical_history,
+            medical_events=medical_events_response,
+            past_conditions=doc.past_conditions,
+            active_treatments=doc.active_treatments,
+            severity_score=doc.severity_score,
+            adoption_readiness=doc.adoption_readiness,
+            medical_document_ids=doc.medical_document_ids,
+            photos=doc.photos,
             created_at=doc.created_at.isoformat() if doc.created_at else None,
             updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
         )
@@ -86,6 +141,11 @@ async def get_dog(dog_id: str):
     try:
         doc = await Dog.get(id=dog_id, using=es_client.client)
 
+        # Convert medical_events to MedicalEvent objects for response
+        medical_events_response = None
+        if hasattr(doc, 'medical_events') and doc.medical_events:
+            medical_events_response = [MedicalEvent(**event) for event in doc.medical_events]
+
         return DogResponse(
             id=dog_id,
             name=doc.name,
@@ -97,7 +157,13 @@ async def get_dog(dog_id: str):
             adoption_status=doc.adoption_status,
             behavioral_notes=doc.behavioral_notes,
             combined_profile=doc.combined_profile,
-            medical_history=doc.medical_history if doc.medical_history else [],
+            medical_history=doc.medical_history if hasattr(doc, 'medical_history') else None,
+            medical_events=medical_events_response,
+            past_conditions=doc.past_conditions if hasattr(doc, 'past_conditions') else None,
+            active_treatments=doc.active_treatments if hasattr(doc, 'active_treatments') else None,
+            severity_score=doc.severity_score if hasattr(doc, 'severity_score') else None,
+            adoption_readiness=doc.adoption_readiness if hasattr(doc, 'adoption_readiness') else None,
+            medical_document_ids=doc.medical_document_ids if hasattr(doc, 'medical_document_ids') else None,
             photos=doc.photos if doc.photos else [],
             created_at=doc.created_at.isoformat() if doc.created_at else None,
             updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
@@ -131,7 +197,7 @@ async def list_dogs(limit: int = 10):
                     adoption_status=hit.adoption_status,
                     behavioral_notes=hit.behavioral_notes,
                     combined_profile=hit.combined_profile,
-                    medical_history=hit.medical_history if hasattr(hit, 'medical_history') and hit.medical_history else [],
+                    medical_history=hit.medical_history if hasattr(hit, 'medical_history') and hit.medical_history else None,
                     photos=hit.photos if hasattr(hit, 'photos') and hit.photos else [],
                     created_at=hit.created_at.isoformat() if hasattr(hit, 'created_at') and hit.created_at else None,
                     updated_at=hit.updated_at.isoformat() if hasattr(hit, 'updated_at') and hit.updated_at else None,
@@ -181,7 +247,7 @@ async def update_dog(dog_id: str, dog_update: DogCreate):
             adoption_status=doc.adoption_status,
             behavioral_notes=doc.behavioral_notes,
             combined_profile=doc.combined_profile,
-            medical_history=doc.medical_history if doc.medical_history else [],
+            medical_history=doc.medical_history if doc.medical_history else None,
             photos=doc.photos if doc.photos else [],
             created_at=doc.created_at.isoformat() if doc.created_at else None,
             updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
@@ -347,7 +413,7 @@ async def create_intake_assessment(
         Please provide a comprehensive intake assessment.
         """
 
-        visual_analysis = await vertex_ai_service.analyze_image(
+        visual_analysis = await vertex_gemini_service.analyze_image(
             photo_bytes, analysis_prompt
         )
 
@@ -466,6 +532,11 @@ async def search_dogs_semantic(
 
         dogs = []
         for hit in response:
+            # Convert medical_events to MedicalEvent objects for response
+            medical_events_response = None
+            if hasattr(hit, 'medical_events') and hit.medical_events:
+                medical_events_response = [MedicalEvent(**event) for event in hit.medical_events]
+
             dogs.append(DogResponse(
                 id=hit.meta.id,
                 name=hit.name,
@@ -476,7 +547,13 @@ async def search_dogs_semantic(
                 rescue_date=hit.rescue_date if hasattr(hit, 'rescue_date') else None,
                 adoption_status=hit.adoption_status if hasattr(hit, 'adoption_status') else None,
                 behavioral_notes=hit.behavioral_notes if hasattr(hit, 'behavioral_notes') else None,
-                medical_history=hit.medical_history if hasattr(hit, 'medical_history') else [],
+                medical_history=hit.medical_history if hasattr(hit, 'medical_history') else None,
+                medical_events=medical_events_response,
+                past_conditions=hit.past_conditions if hasattr(hit, 'past_conditions') else None,
+                active_treatments=hit.active_treatments if hasattr(hit, 'active_treatments') else None,
+                severity_score=hit.severity_score if hasattr(hit, 'severity_score') else None,
+                adoption_readiness=hit.adoption_readiness if hasattr(hit, 'adoption_readiness') else None,
+                medical_document_ids=hit.medical_document_ids if hasattr(hit, 'medical_document_ids') else None,
                 combined_profile=hit.combined_profile if hasattr(hit, 'combined_profile') else None,
                 photos=hit.photos if hasattr(hit, 'photos') else [],
                 created_at=hit.created_at if hasattr(hit, 'created_at') else None,
@@ -489,3 +566,137 @@ async def search_dogs_semantic(
     except Exception as e:
         logger.error(f"Error in semantic search: {e}")
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
+
+
+@router.post("/bulk-upload", response_model=BulkUploadResponse)
+async def bulk_upload_dogs(file: UploadFile = File(...)):
+    """
+    Bulk upload dogs via CSV file with AI-powered medical extraction
+
+    CSV format:
+    - name (required)
+    - breed (optional)
+    - age (optional)
+    - medical_history (optional - free text)
+    - weight_kg (optional)
+    - sex (optional)
+
+    AI automatically processes each row to extract:
+    - Medical events timeline
+    - Past conditions
+    - Active treatments
+    - Severity score
+    - Adoption readiness
+
+    Returns:
+    - Total processed
+    - Successful uploads
+    - Failed uploads
+    - List of created dog IDs
+    """
+    logger.info(f"Bulk upload initiated: {file.filename}")
+
+    try:
+        # Read CSV file
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+
+        # Validate CSV headers
+        required_fields = ['name']
+        optional_fields = ['breed', 'age', 'medical_history', 'weight_kg', 'sex']
+
+        headers = csv_reader.fieldnames
+        if not headers or 'name' not in headers:
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must contain 'name' column"
+            )
+
+        # Parse rows
+        dogs_data = []
+        for row in csv_reader:
+            dog_dict = {
+                'name': row.get('name', '').strip(),
+                'breed': row.get('breed', '').strip() or None,
+                'age': int(row.get('age', 0)) if row.get('age', '').strip() else None,
+                'medical_history': row.get('medical_history', '').strip() or None,
+                'weight_kg': float(row.get('weight_kg', 0)) if row.get('weight_kg', '').strip() else None,
+                'sex': row.get('sex', '').strip() or None,
+            }
+
+            if dog_dict['name']:  # Only add if name is not empty
+                dogs_data.append(dog_dict)
+
+        if not dogs_data:
+            raise HTTPException(status_code=400, detail="No valid dog data found in CSV")
+
+        logger.info(f"Parsed {len(dogs_data)} dogs from CSV")
+
+        # Batch extract medical data
+        extracted_dogs = await medical_extraction_service.batch_extract(dogs_data)
+
+        # Insert into Elasticsearch
+        dog_ids = []
+        errors = []
+        successful = 0
+
+        for i, dog_data in enumerate(extracted_dogs):
+            try:
+                dog_id = str(uuid.uuid4())
+
+                # Create AsyncDocument instance
+                doc = Dog(meta={'id': dog_id})
+
+                # Set basic fields
+                doc.name = dog_data['name']
+                doc.breed = dog_data.get('breed')
+                doc.age = dog_data.get('age')
+                doc.weight_kg = dog_data.get('weight_kg')
+                doc.sex = dog_data.get('sex')
+                doc.rescue_date = datetime.now()
+                doc.adoption_status = "available"
+
+                # Set medical fields
+                doc.medical_history = dog_data.get('medical_history')
+                doc.medical_events = dog_data.get('medical_events', [])
+                doc.past_conditions = dog_data.get('past_conditions', [])
+                doc.active_treatments = dog_data.get('active_treatments', [])
+                doc.severity_score = dog_data.get('severity_score', 0)
+                doc.adoption_readiness = dog_data.get('adoption_readiness', 'ready')
+
+                # Initialize arrays
+                doc.photos = []
+                doc.medical_document_ids = []
+
+                # Save to Elasticsearch
+                await doc.save(using=es_client.client)
+
+                dog_ids.append(dog_id)
+                successful += 1
+
+                logger.info(f"Bulk upload: Created dog {i+1}/{len(extracted_dogs)}: {doc.name} ({dog_id})")
+
+            except Exception as e:
+                logger.error(f"Failed to create dog {dog_data.get('name', 'Unknown')}: {e}")
+                errors.append({
+                    "row": i + 2,  # +2 for CSV line number (header + 0-index)
+                    "name": dog_data.get('name', 'Unknown'),
+                    "error": str(e)
+                })
+
+        logger.info(f"Bulk upload complete: {successful}/{len(dogs_data)} successful")
+
+        return BulkUploadResponse(
+            total_processed=len(dogs_data),
+            successful=successful,
+            failed=len(errors),
+            dog_ids=dog_ids,
+            errors=errors
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Bulk upload failed: {str(e)}")

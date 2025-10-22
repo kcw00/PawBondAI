@@ -1,89 +1,64 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel
-from app.core.agent import agent
-from typing import Optional, Dict, Any
-import uuid
+from fastapi import APIRouter, HTTPException
+from app.services.matching_service import matching_service
+from app.services.vertex_gemini_service import vertex_gemini_service
+from app.models.schemas import ChatRequest, AnalyzeApplicationRequest
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-class ChatRequest(BaseModel):
-    message: str
-    session_id: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
-
-
-class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-
-
-@router.post("", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Main chat endpoint"""
-    session_id = request.session_id or str(uuid.uuid4())
-
+@router.post("/message")
+async def handle_chat_message(request: ChatRequest):
+    """
+    Main conversational endpoint
+    Determines intent and routes to appropriate service
+    """
     try:
-        result = await agent.chat(
-            user_message=request.message, session_id=session_id, context=request.context
-        )
+        # Detect intent using Vertex Gemini
+        intent = await vertex_gemini_service.detect_intent(request.message)
 
-        return ChatResponse(response=result["response"], session_id=result["session_id"])
+        if intent["type"] == "find_adopters":
+            result = await matching_service.find_adopters(
+                query=request.message, filters=intent.get("filters")
+            )
+        elif intent["type"] == "analyze_application":
+            result = await matching_service.analyze_application(request.message)
+        else:
+            # General question
+            result = await vertex_gemini_service.generate_response(
+                prompt=request.message, context=request.context
+            )
+
+        return {"success": True, "intent": intent["type"], "response": result}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/with-image")
-async def chat_with_image(
-    message: str,
-    image: UploadFile = File(...),
-    session_id: Optional[str] = None,
-    context: Optional[str] = None,
-):
-    """Chat endpoint with image upload"""
-    session_id = session_id or str(uuid.uuid4())
-
-    # Read image
-    image_bytes = await image.read()
-
-    # Add image analysis to context
-    import base64
-
-    image_b64 = base64.b64encode(image_bytes).decode()
-
-    # Construct message with image reference
-    enhanced_message = f"{message}\n\n[User uploaded an image for analysis]"
-
-    # Parse context if string
-    context_dict = {}
-    if context:
-        import json
-
-        context_dict = json.loads(context)
-
-    # Add image to context
-    context_dict["image_data"] = image_b64
-    context_dict["has_image"] = True
-
+@router.post("/analyze-application")
+async def analyze_application(request: AnalyzeApplicationRequest):
+    """
+    Analyze an adoption application
+    THE KEY FEATURE for demo
+    """
     try:
-        result = await agent.chat(
-            user_message=enhanced_message, session_id=session_id, context=context_dict
-        )
+        analysis = await matching_service.analyze_application(request.application_text)
 
-        return {
-            "response": result["response"],
-            "session_id": result["session_id"],
-            "image_analyzed": True,
-        }
+        return {"success": True, "analysis": analysis}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{session_id}")
-async def end_session(session_id: str):
-    """End a chat session"""
-    if session_id in agent.chat_sessions:
-        del agent.chat_sessions[session_id]
-        return {"message": "Session ended", "session_id": session_id}
-    else:
-        raise HTTPException(status_code=404, detail="Session not found")
+@router.get("/search-insights/{query_id}")
+async def get_search_insights(query_id: str):
+    """
+    Get Elasticsearch query details for visualization
+    """
+    # TODO: Implement query caching and retrieval
+    return {
+        "success": True,
+        "insights": {
+            "query_id": query_id,
+            # Query breakdown, timing, etc.
+        },
+    }

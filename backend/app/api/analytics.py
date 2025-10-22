@@ -1,26 +1,17 @@
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
-from typing import Dict, Any, Optional
-from pydantic import BaseModel
+from typing import Optional
 from elasticsearch.dsl import AsyncSearch
-from app.models.schemas import MotivationRequest, AnalysisResponse
+from app.models.schemas import MotivationRequest, AnalysisResponse, PredictionRequest
+from app.services.elasticsearch_service import ElasticsearchService, get_elasticsearch_service
+from app.services.vertex_gemini_service import vertex_gemini_service
 from app.services.bigquery_service import bigquery_service
-from app.services.sentiment_service import SentimentService, get_sentiment_service
 from app.services.elasticsearch_client import es_client
 from app.core.logger import setup_logger
-from google.api_core.exceptions import GoogleAPICallError
+from app.core.config import get_settings
 
 router = APIRouter()
 logger = setup_logger(__name__)
-
-
-# Request/Response Schemas
-class PredictionRequest(BaseModel):
-    adopter_experience: str  # "beginner", "intermediate", "expert"
-    dog_difficulty: str  # "easy", "moderate", "challenging"
-    match_score: float  # 0.0 to 1.0
-
-
-# Analytics Endpoints
+settings = get_settings()
 
 
 @router.get("/success-rates")
@@ -50,7 +41,7 @@ async def get_success_rates(
             logger.warning(f"BigQuery not available, using Elasticsearch: {bq_error}")
 
             # Fallback: Use Elasticsearch AsyncSearch
-            s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+            s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
             total_count = await s.count()
 
             success_s = s.filter("term", outcome="success")
@@ -96,19 +87,23 @@ async def predict_adoption_outcome(prediction: PredictionRequest = Body(...)):
         except Exception as bq_error:
             logger.warning(f"BigQuery ML not available, using pattern matching: {bq_error}")
 
-            # Fallback: Use pattern matching from historical outcomes with AsyncSearch
+            # Fallback: Use semantic pattern matching from historical outcomes
             query_text = f"{prediction.adopter_experience} adopter with {prediction.dog_difficulty} dog, match score {prediction.match_score}"
 
-            # Find similar successful outcomes using AsyncSearch
-            success_search = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
-            success_search = success_search.query("match", success_factors=query_text)
+            # Find similar successful outcomes using semantic search
+            success_search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+            success_search = success_search.query(
+                "semantic", field="success_factors", query=query_text
+            )
             success_search = success_search.filter("term", outcome="success")
             success_search = success_search[0:10]
             success_response = await success_search.execute()
 
-            # Find similar failed outcomes using AsyncSearch
-            failed_search = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
-            failed_search = failed_search.query("match", failure_factors=query_text)
+            # Find similar failed outcomes using semantic search
+            failed_search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+            failed_search = failed_search.query(
+                "semantic", field="failure_factors", query=query_text
+            )
             failed_search = failed_search.filter("term", outcome="returned")
             failed_search = failed_search[0:10]
             failed_response = await failed_search.execute()
@@ -131,7 +126,7 @@ async def predict_adoption_outcome(prediction: PredictionRequest = Body(...)):
                 "match_score": prediction.match_score,
                 "similar_successful_cases": len(success_response),
                 "similar_failed_cases": len(failed_response),
-                "source": "Elasticsearch Pattern Matching",
+                "source": "Elasticsearch Semantic Pattern Matching",
                 "recommendation": f"{'Proceed with adoption' if predicted_outcome == 'success' else 'High risk - recommend trial foster'}",
             }
 
@@ -146,24 +141,28 @@ async def predict_adoption_outcome(prediction: PredictionRequest = Body(...)):
 
 
 @router.post("/sentiment", response_model=AnalysisResponse)
-def analyze_sentiment(
-    request: MotivationRequest, service: SentimentService = Depends(get_sentiment_service)
-):
+async def analyze_sentiment(request: MotivationRequest):
     """
-    Analyze sentiment of application text using Google Natural Language API
+    Analyze sentiment of application text using Vertex AI Gemini
+
+    Replaces Google Cloud Natural Language API with Gemini (consolidated AI service)
 
     Demo: "Sentiment: Positive (score: 0.8)"
     """
     try:
-        analysis_result = service.analyze_application_motivation(
-            motivation_text=request.motivation_text
+        analysis_result = await vertex_gemini_service.analyze_sentiment_and_entities(
+            text=request.motivation_text
         )
 
-        return analysis_result
-    except GoogleAPICallError as e:
-        raise HTTPException(
-            status_code=503, detail=f"Error communicating with Google Cloud NLP API: {e.message}"
-        )
+        # Transform to match expected response format
+        return {
+            "sentiment": analysis_result["sentiment"],
+            "key_entities": analysis_result["entities"][:10],  # Top 10
+            "key_themes": analysis_result["themes"],
+            "commitment_assessment": analysis_result["commitment_assessment"],
+            "text_length": analysis_result["text_length"],
+            "recommendation": analysis_result["recommendation"],
+        }
 
     except Exception as e:
         logger.error(f"Error analyzing sentiment: {e}")
@@ -171,7 +170,9 @@ def analyze_sentiment(
 
 
 @router.get("/dashboard")
-async def get_dashboard_analytics():
+async def get_dashboard_analytics(
+    es_service: ElasticsearchService = Depends(get_elasticsearch_service),
+):
     """
     Comprehensive analytics for demo dashboard using Elasticsearch DSL
 
@@ -182,60 +183,7 @@ async def get_dashboard_analytics():
     - Key insights
     """
     try:
-        # Get overall stats from Elasticsearch using AsyncSearch
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
-        # Define aggregations
-        s.aggs.bucket("outcomes", "terms", field="outcome")
-        s.aggs.bucket("experience_breakdown", "terms", field="adopter_experience_level").bucket(
-            "outcomes", "terms", field="outcome"
-        )
-
-        # Execute the search (we don't even need the hits, just the aggregations)
-        response = await s.execute()
-
-        # --- Process Aggregation Results ---
-        aggs = response.aggregations
-
-        total_count = aggs.outcomes.doc_count
-        outcome_counts = {b.key: b.doc_count for b in aggs.outcomes.buckets}
-        success_count = outcome_counts.get("success", 0)
-        return_count = outcome_counts.get("returned", 0)
-        success_rate = (success_count / total_count * 100) if total_count > 0 else 0
-
-        # Process experience breakdown
-        experience_breakdown = {}
-        for bucket in aggs.experience_breakdown.buckets:
-            level = bucket.key
-            level_total = bucket.doc_count
-            level_success = next(
-                (b.doc_count for b in bucket.outcomes.buckets if b.key == "success"), 0
-            )
-            rate = (level_success / level_total * 100) if level_total > 0 else 0
-            experience_breakdown[level] = {
-                "total": level_total,
-                "successful": level_success,
-                "success_rate": round(rate, 2),
-            }
-
-        # Key insights (can be derived from aggregated data)
-        insights = [
-            f"Overall success rate: {round(success_rate, 2)}%",
-            f"Total adoptions tracked: {total_count}",
-        ]
-        if "expert" in experience_breakdown and experience_breakdown["expert"]["success_rate"] > 80:
-            insights.append("Expert adopters have highest success rate")
-
-        dashboard = {
-            "overall_stats": {
-                "total_outcomes": total_count,
-                "successful_adoptions": success_count,
-                "returned_adoptions": return_count,
-                "success_rate": round(success_rate, 2),
-            },
-            "experience_breakdown": experience_breakdown,
-            "key_insights": insights,
-            "data_source": "Elasticsearch (Aggregations)",
-        }
+        dashboard = await es_service.get_realtime_analytics_from_es()
         return dashboard
 
     except Exception as e:
