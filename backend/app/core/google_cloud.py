@@ -1,8 +1,7 @@
 import os
 from pathlib import Path
-from google.cloud import aiplatform, language_v1, documentai_v1, bigquery, storage
+from google.cloud import language_v1, documentai_v1, bigquery, storage
 from google.oauth2 import service_account
-import google.generativeai as genai
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -25,17 +24,9 @@ LANGUAGE_SERVICES_CREDENTIALS = service_account.Credentials.from_service_account
 
 
 def init_google_cloud():
-    """Initialize all Google Cloud clients"""
-
-    # Vertex AI - uses language services credentials
-    aiplatform.init(
-        project=settings.gcp_project_id,
-        location=settings.vertex_ai_location,
-        credentials=LANGUAGE_SERVICES_CREDENTIALS,
-    )
-    print("✅ Vertex AI initialized")
-
-    print("✅ Google Cloud services configured")
+    """Initialize non-GenAI Google Cloud clients (noop for GenAI)."""
+    # Keep for symmetry/logging if you want:
+    print("✅ Google Cloud services configured (GenAI uses google.genai Client)")
 
 
 # Client instances
@@ -46,7 +37,6 @@ class GoogleCloudClients:
     _document_ai_client = None
     _bigquery_client = None
     _storage_client = None
-    _gemini_model = None
 
     @classmethod
     def language(cls) -> language_v1.LanguageServiceClient:
@@ -82,9 +72,3 @@ class GoogleCloudClients:
                 credentials=DOCUMENT_PROCESSOR_CREDENTIALS,  # Storage used for document processing
             )
         return cls._storage_client
-
-    @classmethod
-    def gemini(cls):
-        if cls._gemini_model is None:
-            cls._gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-        return cls._gemini_model
