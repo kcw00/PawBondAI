@@ -91,6 +91,156 @@ class ElasticsearchService:
 
         return [hit.to_dict() for hit in response]
 
+    async def semantic_search(
+        self,
+        index: str,
+        query: str,
+        semantic_field: str,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        size: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Semantic search on any index using ES inference endpoint
+        """
+        s = AsyncSearch(using=self.client, index=index)
+        s = s.query("semantic", field=semantic_field, query=query)
+
+        # Apply filters
+        if filters:
+            for filter_dict in filters:
+                for key, value in filter_dict.items():
+                    s = s.filter("term", **{key: value})
+
+        s = s[0:size]
+        response = await s.execute()
+
+        return {
+            "hits": [
+                {"id": hit.meta.id, "score": hit.meta.score, "data": hit.to_dict()}
+                for hit in response
+            ],
+            "total": response.hits.total.value if hasattr(response.hits.total, "value") else len(response),
+        }
+
+    async def hybrid_search(
+        self,
+        index: str,
+        query: str,
+        semantic_field: str,
+        text_fields: List[str],
+        filters: Optional[Dict[str, Any]] = None,
+        size: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Hybrid search combining semantic + text search with structured filters
+
+        Args:
+            filters: Dictionary with structured filter criteria:
+                - has_yard: bool
+                - yard_size_min: int (minimum square meters)
+                - experience_levels: List[str]
+                - housing_types: List[str]
+                - has_other_pets: bool
+                - behavioral_keywords: List[str] (for boosting relevance)
+        """
+        s = AsyncSearch(using=self.client, index=index)
+
+        # Combine semantic and text queries
+        # NOTE: semantic_field should be semantic_text type and use semantic query
+        # text_fields should be regular text/keyword fields for multi_match
+        semantic_query = Q("semantic", field=semantic_field, query=query)
+
+        # Only create text query if we have non-semantic text fields
+        text_query = Q("multi_match", query=query, fields=text_fields, fuzziness="AUTO") if text_fields else None
+
+        # Boost by behavioral keywords if provided
+        if filters and "behavioral_keywords" in filters and filters["behavioral_keywords"]:
+            behavioral_query = Q(
+                "multi_match",
+                query=" ".join(filters["behavioral_keywords"]),
+                fields=text_fields,  # Use only the text_fields provided, not semantic fields
+                fuzziness="AUTO"
+            )
+            queries = [semantic_query, behavioral_query]
+            if text_query:
+                queries.append(text_query)
+            s = s.query("bool", should=queries)
+        else:
+            queries = [semantic_query]
+            if text_query:
+                queries.append(text_query)
+            s = s.query("bool", should=queries)
+
+        # Apply structured filters
+        if filters:
+            # Boolean field: has_yard
+            if "has_yard" in filters and filters["has_yard"] is not None:
+                s = s.filter("term", has_yard=filters["has_yard"])
+
+            # Range filter: yard_size_min
+            if "yard_size_min" in filters and filters["yard_size_min"] is not None:
+                s = s.filter("range", yard_size_sqm={"gte": filters["yard_size_min"]})
+
+            # Terms filter: experience_levels (multi-value)
+            if "experience_levels" in filters and filters["experience_levels"]:
+                s = s.filter("terms", experience_level=filters["experience_levels"])
+
+            # Terms filter: housing_types (multi-value)
+            if "housing_types" in filters and filters["housing_types"]:
+                s = s.filter("terms", housing_type=filters["housing_types"])
+
+            # Boolean field: has_other_pets
+            if "has_other_pets" in filters and filters["has_other_pets"] is not None:
+                s = s.filter("term", has_other_pets=filters["has_other_pets"])
+
+        s = s[0:size]
+        response = await s.execute()
+
+        return {
+            "hits": [
+                {"id": hit.meta.id, "score": hit.meta.score, "data": hit.to_dict()}
+                for hit in response
+            ],
+            "total": response.hits.total.value if hasattr(response.hits.total, "value") else len(response),
+        }
+
+    async def get_document(self, index: str, doc_id: str) -> Dict[str, Any]:
+        """
+        Get a document by ID
+        """
+        s = AsyncSearch(using=self.client, index=index)
+        s = s.query("ids", values=[doc_id])
+        response = await s.execute()
+
+        if len(response) > 0:
+            return response[0].to_dict()
+        raise Exception(f"Document {doc_id} not found in index {index}")
+
+    async def aggregations(
+        self, index: str, field: str, filters: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Get aggregations for a field
+        """
+        s = AsyncSearch(using=self.client, index=index)
+
+        # Apply filters
+        if filters:
+            for filter_dict in filters:
+                for key, value in filter_dict.items():
+                    s = s.filter("term", **{key: value})
+
+        # Add aggregation
+        s.aggs.bucket("field_agg", "terms", field=field)
+        response = await s.execute()
+
+        # Parse aggregation results
+        if hasattr(response.aggregations, "field_agg"):
+            return {
+                bucket.key: bucket.doc_count for bucket in response.aggregations.field_agg.buckets
+            }
+        return {}
+
     async def get_realtime_analytics_from_es(self) -> Dict[str, Any]:
         """
         Get comprehensive analytics for dashboard using Elasticsearch DSL
