@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from google.cloud import aiplatform, language_v1, documentai_v1, bigquery, storage
-from google.cloud import vision
 from google.oauth2 import service_account
 import google.generativeai as genai
 from app.core.config import get_settings
@@ -47,7 +46,6 @@ class GoogleCloudClients:
     _document_ai_client = None
     _bigquery_client = None
     _storage_client = None
-    _vision_client = None
     _gemini_model = None
 
     @classmethod
@@ -71,7 +69,8 @@ class GoogleCloudClients:
         if cls._bigquery_client is None:
             cls._bigquery_client = bigquery.Client(
                 project=settings.gcp_project_id,
-                credentials=ANALYTICS_ML_CREDENTIALS
+                credentials=ANALYTICS_ML_CREDENTIALS,
+                location=settings.gcp_region,
             )
         return cls._bigquery_client
 
@@ -80,17 +79,9 @@ class GoogleCloudClients:
         if cls._storage_client is None:
             cls._storage_client = storage.Client(
                 project=settings.gcp_project_id,
-                credentials=DOCUMENT_PROCESSOR_CREDENTIALS  # Storage used for document processing
+                credentials=DOCUMENT_PROCESSOR_CREDENTIALS,  # Storage used for document processing
             )
         return cls._storage_client
-
-    @classmethod
-    def vision(cls) -> vision.ImageAnnotatorClient:
-        if cls._vision_client is None:
-            cls._vision_client = vision.ImageAnnotatorClient(
-                credentials=LANGUAGE_SERVICES_CREDENTIALS  # Vision API grouped with language services
-            )
-        return cls._vision_client
 
     @classmethod
     def gemini(cls):

@@ -6,6 +6,7 @@ import asyncio
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 from app.services.elasticsearch_client import es_client
+from app.core.google_cloud import GoogleCloudClients
 
 settings = get_settings()
 logger = setup_logger(__name__)
@@ -18,7 +19,7 @@ class BigQueryService:
     """
 
     def __init__(self):
-        self.client = bigquery.Client(project=settings.gcp_project_id)
+        self.client = GoogleCloudClients.bigquery()
         self.dataset_id = "rescue_analytics"
         self.outcomes_table_id = "outcomes_history"
         self.predictions_table_id = "predictions_log"
@@ -199,10 +200,10 @@ class BigQueryService:
                 "prediction_id": str(datetime.now().timestamp()),
                 "predicted_outcome": prediction["predicted_outcome"],
                 "confidence": prediction["confidence"],
-                "adopter_experience": prediction["adopter_experience"],
-                "dog_difficulty": prediction["dog_difficulty"],
+                "adopter_experience_level": prediction["adopter_experience"],
+                "dog_difficulty_level": prediction["dog_difficulty"],
                 "match_score": prediction["match_score"],
-                "predicted_at": datetime.now().isoformat(),
+                "created_at": datetime.now().isoformat(),
             }
 
             errors = await asyncio.to_thread(
