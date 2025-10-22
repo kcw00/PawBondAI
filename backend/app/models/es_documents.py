@@ -8,7 +8,6 @@ from elasticsearch.dsl import (
     Float,
     Integer,
     Boolean,
-    DenseVector,
     Nested,
     InnerDoc,
     Object,
@@ -25,7 +24,7 @@ class KnowledgeArticle(AsyncDocument):
     # Use dot notation for nested fields
     title = Text(fields={"raw": Keyword()})
     content_chunk = Text(analyzer="standard")
-    content_embedding = DenseVector(dims=768)  # Adjust dims based on your embedding model
+    # Note: content_embedding removed - ES handles embeddings via semantic_text in index mapping
 
     source = Keyword()
     filename = Keyword()
@@ -62,8 +61,7 @@ class CaseStudy(AsyncDocument):
     follow_up = Text()
     learning_points = Text()
 
-    # Vector embeddings
-    symptoms_embedding = DenseVector(dims=768)
+    # Note: symptoms_embedding removed - ES handles embeddings via semantic_text in index mapping
 
     # Patient information
     patient_species = Keyword()
@@ -139,7 +137,7 @@ class Dog(AsyncDocument):
     updated_at = Date()
 
     class Index:
-        name = "dogs"
+        name = settings.dogs_index
         # No settings for serverless - managed by Elasticsearch
 
     def save(self, **kwargs):
@@ -183,8 +181,7 @@ class Application(AsyncDocument):
     submitted_at = Date()
 
     class Index:
-        name = "applications"
-        # No settings for serverless - managed by Elasticsearch
+        name = settings.applications_index
 
     def save(self, **kwargs):
         """Override save to set timestamps"""
@@ -232,7 +229,7 @@ class RescueAdoptionOutcome(AsyncDocument):
     created_by = Keyword()
 
     class Index:
-        name = "rescue-adoption-outcomes"
+        name = settings.outcomes_index
         # No settings for serverless - managed by Elasticsearch
 
     def save(self, **kwargs):
