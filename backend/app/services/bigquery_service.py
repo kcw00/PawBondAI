@@ -33,7 +33,7 @@ class BigQueryService:
         Run this as a nightly batch job
         """
         try:
-            search = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+            search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
             rows_to_insert = []
 
             async for hit in search.scan():

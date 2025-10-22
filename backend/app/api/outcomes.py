@@ -8,9 +8,11 @@ from app.models.es_documents import RescueAdoptionOutcome
 from app.services.elasticsearch_client import es_client
 from app.core.logger import setup_logger
 from elasticsearch.dsl import AsyncSearch, Q
+from app.core.config import get_settings
 
 router = APIRouter()
 logger = setup_logger(__name__)
+settings = get_settings()
 
 
 # 1. Create a new outcome
@@ -86,7 +88,7 @@ async def get_dog_outcomes(dog_id: str = Path(...)):
     """
     try:
         # Use AsyncSearch with filter
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
         s = s.filter("term", dog_id=dog_id)
         s = s.sort("-adoption_date")
 
@@ -129,7 +131,7 @@ async def get_outcome_stats():
     Get aggregate statistics on all outcomes using AsyncSearch
     """
     try:
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
 
         # Total count
         total_count = await s.count()
@@ -169,7 +171,7 @@ async def get_successful_outcomes(
     """
     try:
         # Use AsyncSearch with filters
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
         s = s.filter("term", outcome="success")
 
         if min_satisfaction:
@@ -213,7 +215,7 @@ async def get_failed_outcomes(limit: int = Query(10, ge=1, le=100)):
     """
     try:
         # Use AsyncSearch with filter
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
         s = s.filter("term", outcome="returned")
         s = s.sort("days_until_return")  # Fastest returns first
         s = s[0:limit]
@@ -271,7 +273,7 @@ async def search_similar_outcomes(
             filter_outcome = "returned"
 
         # Use AsyncSearch with semantic query (uses ES inference endpoint)
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
         s = s.query("semantic", field=search_field, query=query)
         s = s.filter("term", outcome=filter_outcome)
         s = s[0:limit]
@@ -313,7 +315,7 @@ async def list_outcomes(
 ):
     """List all outcomes with pagination using AsyncSearch"""
     try:
-        s = AsyncSearch(using=es_client.client, index="rescue-adoption-outcomes")
+        s = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
         s = s.query("match_all")
 
         # Add filter if specified
