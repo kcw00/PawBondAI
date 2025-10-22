@@ -24,9 +24,10 @@ class Settings(BaseSettings):
 
     # Google Cloud
     gcp_project_id: str
-    gcp_region: str = "us-west1"
-    vertex_ai_location: str = "us-west1"
+    gcp_region: str
+    vertex_ai_location: str
     doc_ai_processor_id: str
+    gemini_model: str
 
     # Service account credentials
     DOCUMENT_PROCESSOR_SA_KEY: str = "keys/document-processor-sa-key.json"
