@@ -1,3 +1,9 @@
+import warnings
+
+# Suppress Pydantic warnings from Google Cloud SDK internal classes
+# Must be set before importing any Google Cloud libraries
+warnings.filterwarnings("ignore", message="Field name .* shadows an attribute in parent")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes, dogs, knowledge, case_studies, chat, applications, outcomes, analytics
