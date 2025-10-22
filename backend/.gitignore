@@ -86,6 +86,4 @@ dmypy.json
 .pyre/
 
 # Google Cloud credentials
-*.json
-!example.json
-service-account-key.json
+backend/keys/

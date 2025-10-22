@@ -26,17 +26,19 @@ class Settings(BaseSettings):
     gcp_project_id: str
     gcp_region: str = "us-west1"
     vertex_ai_location: str = "us-west1"
+    doc_ai_processor_id: str
 
-    # Google APIs
-    google_maps_api_key: str
-    google_api_key: Optional[str] = None  # For Gemini API
+    # Service account credentials
+    DOCUMENT_PROCESSOR_SA_KEY: str = "keys/document-processor-sa-key.json"
+    ANALYTICS_ML_SA_KEY: str = "keys/analytics-ml-sa-key.json"
+    LANGUAGE_SERVICES_SA_KEY: str = "keys/language-services-sa-key.json"
 
     # Index names
     dogs_index: str = "dogs"
     vet_knowledge_index: str = "veterinary_knowledge"
     case_studies_index: str = "case_studies"
     applications_index: str = "applications"
-    outcomes_index: str = "rescue-adoption_outcomes"
+    outcomes_index: str = "rescue-adoption-outcomes"
 
     # Optional: Google Cloud Storage
     gcs_bucket_name: str = ""
