@@ -159,10 +159,14 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """
+    Unified chat request model supporting both general chat and dog-specific queries
+    """
     message: str
-    dog_id: Optional[str] = None
-    image_url: Optional[str] = None
-    conversation_history: List[ChatMessage] = []
+    context: Optional[Dict[str, Any]] = None  # General context (session_id, etc.)
+    dog_id: Optional[str] = None  # Specific dog being discussed
+    image_url: Optional[str] = None  # Optional image for analysis
+    conversation_history: List[ChatMessage] = []  # Chat history
 
 
 class ChatResponse(BaseModel):
@@ -416,12 +420,7 @@ class PredictionRequest(BaseModel):
     match_score: float  # 0.0 to 1.0
 
 
-# Chat Models
-class ChatRequest(BaseModel):
-    message: str
-    context: Optional[Dict[str, Any]] = None
-
-
+# Additional Chat Models
 class AnalyzeApplicationRequest(BaseModel):
     application_text: str
 
