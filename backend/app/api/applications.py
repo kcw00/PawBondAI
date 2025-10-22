@@ -18,6 +18,7 @@ logger = setup_logger(__name__)
 
 
 # 1. Create an application
+# ~~~~worked! testing done by with postman.
 @router.post("", response_model=ApplicationResponse)
 async def create_application(application: ApplicationCreate = Body(...)):
     """Create a new foster/adoption application - FLAT structure"""
@@ -63,6 +64,7 @@ async def create_application(application: ApplicationCreate = Body(...)):
 
 
 # 2. Get an application by ID
+# ~~~~worked! testing done by with postman.
 @router.get("/{application_id}", response_model=ApplicationResponse)
 async def get_application(application_id: str):
     """Get an application by ID"""
@@ -98,6 +100,7 @@ async def get_application(application_id: str):
 
 
 # 3. List all applications with filters
+# ~~~~worked! testing done by with postman.
 @router.get("", response_model=List[ApplicationResponse])
 async def list_applications(
     limit: int = Query(10, ge=1, le=100),
@@ -107,7 +110,7 @@ async def list_applications(
 ):
     """List applications with filters and pagination"""
     try:
-        s = AsyncSearch(using=es_client.client, index="applications")
+        s = AsyncSearch(using=es_client.client, index=settings.applications_index)
         s = s.query("match_all")
 
         # Add filters
@@ -160,6 +163,7 @@ async def list_applications(
 
 
 # 4. Update an application
+# ~~~~worked! testing done by with postman.
 @router.put("/{application_id}", response_model=ApplicationResponse)
 async def update_application(
     application_id: str,
@@ -198,6 +202,7 @@ async def update_application(
 
 
 # 5. Delete an application
+# ~~~~worked! testing done by with postman.
 @router.delete("/{application_id}")
 async def delete_application(application_id: str):
     """Delete an application"""
@@ -434,6 +439,7 @@ async def upload_and_index_csv(file: UploadFile = File(...)):
 
 
 # Semantic Search Endpoint
+# ~~~~worked! testing done by with postman.
 @router.post("/search", response_model=List[ApplicationResponse])
 async def search_applications_semantic(
     query: str = Body(..., embed=True),
