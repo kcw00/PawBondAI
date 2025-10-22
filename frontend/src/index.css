@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Rescue platform color scheme - warm, organic, compassionate */
+    --background: 45 100% 97%; /* Cream #fffcf2 */
+    --foreground: 84 21% 25%; /* Dark olive for text */
+
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 84 21% 25%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 84 21% 25%;
+
+    --primary: 90 42% 80%; /* Sage green #CFE1B9 - AI assistant */
+    --primary-foreground: 84 21% 25%;
+
+    --secondary: 27 87% 67%; /* Warm orange #f4a261 - actions */
+    --secondary-foreground: 0 0% 100%; /* White text on orange */
+
+    --muted: 90 30% 92%; /* Lighter sage */
+    --muted-foreground: 84 15% 45%;
+
+    --accent: 27 87% 67%; /* Orange accent */
+    --accent-foreground: 0 0% 100%;
+
+    --success: 98 33% 45%; /* Forest green #6a994e */
+    --success-foreground: 0 0% 100%;
+
+    --warning: 43 74% 66%; /* Yellow #e9c46a */
+    --warning-foreground: 84 21% 25%;
+
+    --button: 84 21% 42%; /* Olive green #718355 */
+    --button-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 90 30% 88%;
+    --input: 90 30% 95%;
+    --ring: 84 21% 42%;
+
+    --radius: 0.75rem;
+    
+    /* Custom design tokens */
+    --chat-user: 210 100% 65%; /* Blue for user messages */
+    --chat-ai: 0 0% 100%; /* White for AI messages */
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(90, 42%, 80%), hsl(98, 33%, 70%));
+    --gradient-warm: linear-gradient(135deg, hsl(27, 87%, 67%), hsl(43, 74%, 66%));
+    --gradient-welcome: linear-gradient(135deg, hsl(98, 28%, 88%), hsl(45, 50%, 90%)); /* Soft green-beige */
+    
+    /* Shadows */
+    --shadow-soft: 0 2px 8px -2px hsl(84 21% 25% / 0.08);
+    --shadow-medium: 0 4px 16px -4px hsl(84 21% 25% / 0.12);
+    --shadow-strong: 0 8px 24px -6px hsl(84 21% 25% / 0.16);
+    
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 84 15% 12%;
+    --foreground: 90 30% 92%;
+
+    --card: 84 15% 15%;
+    --card-foreground: 90 30% 92%;
+
+    --popover: 84 15% 15%;
+    --popover-foreground: 90 30% 92%;
+
+    --primary: 90 42% 70%;
+    --primary-foreground: 84 21% 15%;
+
+    --secondary: 27 87% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 84 15% 22%;
+    --muted-foreground: 90 20% 65%;
+
+    --accent: 27 87% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 98 33% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 43 74% 60%;
+    --warning-foreground: 84 21% 15%;
+
+    --button: 84 21% 35%;
+    --button-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 84 15% 25%;
+    --input: 84 15% 22%;
+    --ring: 84 21% 45%;
+    
+    --chat-user: 210 100% 60%;
+    --chat-ai: 84 15% 18%;
+    
+    --shadow-soft: 0 2px 8px -2px hsl(0 0% 0% / 0.3);
+    --shadow-medium: 0 4px 16px -4px hsl(0 0% 0% / 0.4);
+    --shadow-strong: 0 8px 24px -6px hsl(0 0% 0% / 0.5);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
