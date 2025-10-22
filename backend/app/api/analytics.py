@@ -14,6 +14,9 @@ logger = setup_logger(__name__)
 settings = get_settings()
 
 
+# Success Rates Endpoint
+# ~~~~worked! testing done by with postman.
+# filter does not work yet.
 @router.get("/success-rates")
 async def get_success_rates(
     adopter_experience: Optional[str] = Query(
@@ -67,71 +70,164 @@ async def get_success_rates(
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
+# ML Prediction Endpoint
+# ~~~~worked! testing done by with postman.
 @router.post("/predict")
 async def predict_adoption_outcome(prediction: PredictionRequest = Body(...)):
     """
-    ML prediction for adoption outcome using Elasticsearch DSL
-
-    Demo: "Predicted: SUCCESS - 92% confidence"
+    Predict adoption outcome.
+    - Primary: BigQuery ML (logistic regression)
+    - Fallback: Elasticsearch semantic pattern matching
+    - Explainability (both paths): top-3 similar success/failure cases from ES
     """
     try:
-        # Try BigQuery ML prediction
+        # ---------- helper: explainability from ES (top-3 + total counts) ----------
+        async def _explain_with_es(exp_level: str, dog_diff: str, match_score: float):
+            query_text = f"{exp_level} adopter with {dog_diff} dog, match score {match_score}"
+
+            # Top-3 similar successes
+            s_success = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+            s_success = s_success.query("semantic", field="success_factors", query=query_text)
+            s_success = s_success.filter("term", outcome="success")[0:3]
+            r_success = await s_success.execute()
+
+            # Top-3 similar failures (returned)
+            s_failed = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+            s_failed = s_failed.query("semantic", field="failure_factors", query=query_text)
+            s_failed = s_failed.filter("term", outcome="returned")[0:3]
+            r_failed = await s_failed.execute()
+
+            def _hits_total(resp):
+                try:
+                    return int(resp.hits.total.value)
+                except Exception:
+                    return len(resp)
+
+            top_successes = [
+                {
+                    "id": h.meta.id,
+                    "score": round(float(getattr(h.meta, "score", 0.0)), 4),
+                    "dog_id": getattr(h, "dog_id", None),
+                }
+                for h in r_success
+            ]
+            top_failures = [
+                {
+                    "id": h.meta.id,
+                    "score": round(float(getattr(h.meta, "score", 0.0)), 4),
+                    "dog_id": getattr(h, "dog_id", None),
+                }
+                for h in r_failed
+            ]
+
+            return {
+                "similar_successful_cases": _hits_total(r_success),
+                "similar_failed_cases": _hits_total(r_failed),
+                "top_similar_successes": top_successes,
+                "top_similar_failures": top_failures,
+            }
+
+        # -------------------- try BigQuery ML first --------------------
         try:
             result = await bigquery_service.predict_outcome_ml(
                 adopter_experience=prediction.adopter_experience,
                 dog_difficulty=prediction.dog_difficulty,
                 match_score=prediction.match_score,
             )
-            result["source"] = "BigQuery ML"
 
+            # Enrich with ES-based explainability (top-3 examples + counts)
+            explain = await _explain_with_es(
+                prediction.adopter_experience,
+                prediction.dog_difficulty,
+                prediction.match_score,
+            )
+
+            result.update(
+                {
+                    "source": "BigQuery ML",
+                    **explain,
+                }
+            )
+
+        # -------------------- fallback: ES semantic pattern matching --------------------
         except Exception as bq_error:
             logger.warning(f"BigQuery ML not available, using pattern matching: {bq_error}")
 
-            # Fallback: Use semantic pattern matching from historical outcomes
-            query_text = f"{prediction.adopter_experience} adopter with {prediction.dog_difficulty} dog, match score {prediction.match_score}"
+            query_text = (
+                f"{prediction.adopter_experience} adopter with "
+                f"{prediction.dog_difficulty} dog, match score {prediction.match_score}"
+            )
 
-            # Find similar successful outcomes using semantic search
+            # Find similar successful outcomes
             success_search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
             success_search = success_search.query(
                 "semantic", field="success_factors", query=query_text
             )
-            success_search = success_search.filter("term", outcome="success")
-            success_search = success_search[0:10]
+            success_search = success_search.filter("term", outcome="success")[0:10]
             success_response = await success_search.execute()
 
-            # Find similar failed outcomes using semantic search
+            # Find similar failed outcomes
             failed_search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
             failed_search = failed_search.query(
                 "semantic", field="failure_factors", query=query_text
             )
-            failed_search = failed_search.filter("term", outcome="returned")
-            failed_search = failed_search[0:10]
+            failed_search = failed_search.filter("term", outcome="returned")[0:10]
             failed_response = await failed_search.execute()
 
-            # Calculate prediction based on similarity scores
-            success_scores = [hit.meta.score for hit in success_response]
-            failed_scores = [hit.meta.score for hit in failed_response]
-
+            # Confidence from similarity scores
+            success_scores = [float(getattr(h.meta, "score", 0.0)) for h in success_response]
+            failed_scores = [float(getattr(h.meta, "score", 0.0)) for h in failed_response]
             total_score = sum(success_scores) + sum(failed_scores)
-            success_ratio = sum(success_scores) / total_score if total_score > 0 else 0.5
+            success_ratio = (sum(success_scores) / total_score) if total_score > 0 else 0.5
 
             predicted_outcome = "success" if success_ratio > 0.5 else "returned"
-            confidence = success_ratio if predicted_outcome == "success" else (1 - success_ratio)
+            confidence = success_ratio if predicted_outcome == "success" else (1.0 - success_ratio)
+
+            # Explainability (reuse the top items from these responses)
+            def _hits_total(resp):
+                try:
+                    return int(resp.hits.total.value)
+                except Exception:
+                    return len(resp)
+
+            top_successes = [
+                {
+                    "id": h.meta.id,
+                    "score": round(float(getattr(h.meta, "score", 0.0)), 4),
+                    "dog_id": getattr(h, "dog_id", None),
+                }
+                for h in list(success_response)[:3]
+            ]
+            top_failures = [
+                {
+                    "id": h.meta.id,
+                    "score": round(float(getattr(h.meta, "score", 0.0)), 4),
+                    "dog_id": getattr(h, "dog_id", None),
+                }
+                for h in list(failed_response)[:3]
+            ]
 
             result = {
                 "predicted_outcome": predicted_outcome,
-                "confidence": round(confidence, 4),
+                "confidence": round(float(confidence), 4),
                 "adopter_experience": prediction.adopter_experience,
                 "dog_difficulty": prediction.dog_difficulty,
                 "match_score": prediction.match_score,
-                "similar_successful_cases": len(success_response),
-                "similar_failed_cases": len(failed_response),
+                "similar_successful_cases": _hits_total(success_response),
+                "similar_failed_cases": _hits_total(failed_response),
+                "top_similar_successes": top_successes,
+                "top_similar_failures": top_failures,
                 "source": "Elasticsearch Semantic Pattern Matching",
-                "recommendation": f"{'Proceed with adoption' if predicted_outcome == 'success' else 'High risk - recommend trial foster'}",
+                "recommendation": (
+                    "Proceed with adoption"
+                    if predicted_outcome == "success"
+                    else "High risk - recommend trial foster"
+                ),
             }
 
         logger.info(
-            f"Prediction: {result['predicted_outcome']} (confidence: {result['confidence']})"
+            f"Prediction: {result.get('predicted_outcome') or result.get('outcome')} "
+            f"(confidence: {result['confidence']})"
         )
         return result
 
@@ -140,6 +236,8 @@ async def predict_adoption_outcome(prediction: PredictionRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
+# Sentiment Analysis Endpoint
+# ~~~~worked! testing done by with postman.
 @router.post("/sentiment", response_model=AnalysisResponse)
 async def analyze_sentiment(request: MotivationRequest):
     """
@@ -169,6 +267,8 @@ async def analyze_sentiment(request: MotivationRequest):
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
+# Dashboard Analytics Endpoint
+# ~~~~worked! testing done by with postman.
 @router.get("/dashboard")
 async def get_dashboard_analytics(
     es_service: ElasticsearchService = Depends(get_elasticsearch_service),
@@ -191,6 +291,8 @@ async def get_dashboard_analytics(
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
+#  BigQuery Sync Endpoint
+# ~~~~worked! testing done by with postman.
 @router.post("/sync-bigquery")
 async def trigger_bigquery_sync():
     """
