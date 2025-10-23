@@ -26,51 +26,77 @@ export default function DataManagementPage() {
   const dogsInputRef = useRef<HTMLInputElement>(null);
   const casesInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases') => (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases') => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const totalRows = Math.floor(Math.random() * 30) + 20; // Mock 20-50 rows
-
+    // Set initial upload state
     setUploadProgress({
       isUploading: true,
       fileName: file.name,
-      totalRows,
+      totalRows: 0,
       currentRow: 0,
       stage: 'uploading'
     });
 
-    // Simulate upload process
-    let currentRow = 0;
-    const stages: Array<'uploading' | 'parsing' | 'extracting' | 'embedding' | 'indexing' | 'complete'> =
-      ['uploading', 'parsing', 'extracting', 'embedding', 'indexing', 'complete'];
-    let stageIndex = 0;
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const interval = setInterval(() => {
-      if (stageIndex >= stages.length - 1) {
-        setUploadProgress(prev => prev ? { ...prev, stage: 'complete' } : null);
-        clearInterval(interval);
-        return;
+      // Different endpoints for different types
+      const uploadEndpoint = type === 'applications'
+        ? '/api/v1/applications/csv/upload'
+        : type === 'dogs'
+        ? '/api/v1/dogs/bulk-upload'
+        : '/api/v1/outcomes/csv/upload'; // cases endpoint
+
+      setUploadProgress(prev => prev ? { ...prev, stage: 'parsing' } : null);
+
+      const response = await fetch(`http://localhost:8000${uploadEndpoint}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
       }
 
-      if (stages[stageIndex] === 'embedding' || stages[stageIndex] === 'indexing') {
-        currentRow += 2;
-        if (currentRow >= totalRows) {
-          stageIndex++;
-          currentRow = totalRows;
-        }
-      } else {
-        stageIndex++;
-      }
+      const data = await response.json();
 
+      // Update progress through stages
       setUploadProgress(prev => prev ? {
         ...prev,
-        currentRow,
-        stage: stages[stageIndex]
+        stage: 'extracting',
+        totalRows: data.total_processed || data.total_rows || 0
       } : null);
-    }, 300);
 
-    toast.success(`Processing ${file.name}...`);
+      setTimeout(() => {
+        setUploadProgress(prev => prev ? { ...prev, stage: 'embedding' } : null);
+      }, 500);
+
+      setTimeout(() => {
+        setUploadProgress(prev => prev ? {
+          ...prev,
+          stage: 'indexing',
+          currentRow: data.indexed_count || data.successful || 0
+        } : null);
+      }, 1000);
+
+      setTimeout(() => {
+        setUploadProgress(prev => prev ? { ...prev, stage: 'complete' } : null);
+
+        toast.success(`Successfully indexed ${data.indexed_count || data.successful || 0} ${type}!`);
+
+        if (data.failed_count > 0 || data.failed > 0) {
+          toast.warning(`${data.failed_count || data.failed} rows failed to index`);
+        }
+      }, 1500);
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setUploadProgress(null);
+    }
   };
 
   return (
