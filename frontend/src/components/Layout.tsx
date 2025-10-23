@@ -1,16 +1,14 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Brain } from "lucide-react";
+import { ChevronRight, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LeftSidebar } from "./LeftSidebar";
 import { ChatInterface } from "./ChatInterface";
-import { RightSidebar } from "./RightSidebar";
 import { AITraceDrawer } from "./AITraceDrawer";
 import { useSearch } from "@/contexts/SearchContext";
 import { Badge } from "@/components/ui/badge";
 
 export const Layout = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const { showTrace, setShowTrace, searchType, currentQuery } = useSearch();
 
   return (
@@ -40,30 +38,6 @@ export const Layout = () => {
         {/* Center Panel - Chat Interface */}
         <div className="flex-1 flex flex-col min-w-0">
           <ChatInterface />
-        </div>
-
-        {/* Right Collapse Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setRightCollapsed(!rightCollapsed)}
-          className={`absolute top-1/2 -translate-y-1/2 z-10 rounded-lg h-12 w-8 bg-primary/10 hover:bg-muted/50 border border-border shadow-lg transition-all duration-300 ${rightCollapsed ? 'right-2' : 'right-[19rem]'
-            }`}
-          title={rightCollapsed ? "Show context" : "Hide context"}
-        >
-          {rightCollapsed ? (
-            <ChevronLeft className="h-5 w-5" />
-          ) : (
-            <ChevronRight className="h-5 w-5" />
-          )}
-        </Button>
-
-        {/* Right Sidebar - Search Context */}
-        <div
-          className={`transition-all duration-300 border-l border-border flex-shrink-0 ${rightCollapsed ? "w-0" : "w-80"
-            }`}
-        >
-          {!rightCollapsed && <RightSidebar />}
         </div>
 
         {/* AI Trace Button - Top Right */}
