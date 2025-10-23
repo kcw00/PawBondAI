@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     case_studies_index: str = "case_studies"
     applications_index: str = "applications"
     outcomes_index: str = "rescue-adoption-outcomes"
+    medical_documents_index: str = "medical_documents"
 
     # Optional: Google Cloud Storage
     gcs_bucket_name: str = ""
