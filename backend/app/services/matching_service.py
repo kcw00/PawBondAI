@@ -53,13 +53,19 @@ class MatchingService:
     async def find_adopters(
         self, query: str, filters: Optional[Dict[str, Any]] = None, limit: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Find matching adopters using hybrid search with structured filters"""
+        """
+        Find matching adopters using hybrid search with structured filters.
+        Automatically handles multilingual applications via translation.
+        """
+        from app.services.vertex_gemini_service import vertex_gemini_service
+        from app.services.language_service import get_language_name
+        
         # Use semantic search on motivation field only
         # Other fields (other_pets_description, family_members) are likely semantic_text too
         # So we'll rely on semantic search + filters for now
         # Default to 5 results if not specified
         size = limit if limit is not None else 5
-        return await es_service.hybrid_search(
+        search_results = await es_service.hybrid_search(
             index=settings.applications_index,
             query=query,
             semantic_field="motivation",
@@ -67,6 +73,40 @@ class MatchingService:
             filters=filters,
             size=size,
         )
+        
+        # Translate non-English results for LLM context
+        hits = search_results.get("hits", [])
+        if hits:
+            # Prepare items for batch translation
+            items_to_translate = []
+            for hit in hits:
+                items_to_translate.append({
+                    "text": hit.get("motivation", ""),
+                    "language": hit.get("language", "en"),
+                    "applicant_name": hit.get("applicant_name", ""),
+                })
+            
+            # Batch translate non-English items
+            translated_items = await vertex_gemini_service.batch_translate_to_english(
+                items=items_to_translate,
+                text_field="text",
+                language_field="language"
+            )
+            
+            # Add translated text and language info back to hits
+            for idx, hit in enumerate(hits):
+                if idx < len(translated_items):
+                    original_lang = translated_items[idx].get("language", "en")
+                    hit["translated_motivation"] = translated_items[idx].get("translated_text", hit.get("motivation", ""))
+                    hit["original_language"] = original_lang
+                    hit["language_name"] = get_language_name(original_lang)
+                    
+                    # Log multilingual matches
+                    if original_lang != "en":
+                        logger.info(f"🌍 Multilingual match: {hit.get('applicant_name')} ({original_lang} → en)")
+        
+        search_results["hits"] = hits
+        return search_results
 
     async def find_dogs_for_adopter(
         self, adopter_text: str, filters: Optional[List[Dict]] = None
