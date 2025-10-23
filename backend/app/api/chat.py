@@ -23,10 +23,27 @@ async def handle_chat_message(request: ChatRequest):
         # Route based on intent type
         if intent["type"] == "find_adopters":
             # Use matching service for adopter search
-            result = await matching_service.find_adopters(
+            search_results = await matching_service.find_adopters(
                 query=request.message, filters=intent.get("filters")
             )
-            return {"success": True, "intent": intent["type"], "response": result}
+
+            # Let Gemini format the results into natural language
+            formatted_text = await vertex_gemini_service.format_search_results(
+                query=request.message,
+                search_results=search_results,
+                search_type="adopters"
+            )
+
+            return {
+                "success": True,
+                "intent": intent["type"],
+                "response": {
+                    "text": formatted_text,  # Gemini's natural language response
+                    "matches": search_results.get("hits", []),  # Structured data for cards
+                    "total": len(search_results.get("hits", [])),
+                    "query_time_ms": search_results.get("took", 0),
+                }
+            }
 
         elif intent["type"] == "analyze_application":
             # Use matching service for application analysis

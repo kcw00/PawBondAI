@@ -257,6 +257,92 @@ RULES:
         }
 
     # ========================================
+    # SEARCH RESULT FORMATTING
+    # ========================================
+    async def format_search_results(
+        self,
+        query: str,
+        search_results: Dict[str, Any],
+        search_type: str = "adopters"
+    ) -> str:
+        """
+        Format Elasticsearch search results into natural language using Gemini.
+
+        Args:
+            query: The original user query
+            search_results: Raw Elasticsearch results with hits array
+            search_type: Type of search ("adopters" or "dogs")
+
+        Returns:
+            Natural language formatted response
+        """
+        hits = search_results.get("hits", [])
+
+        if not hits:
+            if search_type == "adopters":
+                return "I couldn't find any matching adopters for your search. Try broadening your criteria or being more specific about what you're looking for."
+            else:
+                return "I couldn't find any matching dogs. Try adjusting your search criteria."
+
+        # Prepare data for Gemini
+        matches_summary = []
+        for i, hit in enumerate(hits[:5], 1):  # Top 5 for context
+            source = hit.get("_source", {})
+            score = hit.get("_score", 0)
+
+            if search_type == "adopters":
+                matches_summary.append({
+                    "rank": i,
+                    "name": source.get("applicant_name", "Unknown"),
+                    "score": round(score, 3),
+                    "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(", "),
+                    "housing": source.get("housing_type", ""),
+                    "motivation": source.get("motivation", "")[:200],  # First 200 chars
+                    "experience": source.get("experience_level", ""),
+                    "employment": source.get("employment_status", ""),
+                })
+            else:
+                matches_summary.append({
+                    "rank": i,
+                    "name": source.get("name", "Unknown"),
+                    "score": round(score, 3),
+                    "breed": source.get("breed", ""),
+                    "age": source.get("age", ""),
+                    "personality": source.get("personality_traits", "")[:200],
+                })
+
+        prompt = f"""You are a helpful rescue coordinator AI assistant. A user searched for: "{query}"
+
+I found {len(hits)} matching {search_type} using Elasticsearch semantic search. Here are the top {len(matches_summary)} matches:
+
+{json.dumps(matches_summary, indent=2)}
+
+Write a friendly, conversational response (2-3 sentences) that:
+1. Confirms how many matches were found
+2. Highlights what makes the top matches relevant to the query
+3. Encourages the user to review the detailed match cards
+
+Be warm and helpful. Don't repeat the technical data - that will be shown in cards below your message.
+Don't use markdown formatting. Keep it natural and conversational.
+"""
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+            )
+            formatted_response = (response.text or "").strip()
+            logger.info(f"Formatted search results with Gemini for query: {query}")
+            return formatted_response
+        except Exception as e:
+            logger.error(f"Error formatting search results with Gemini: {e}")
+            # Fallback to simple message
+            if search_type == "adopters":
+                return f"Found {len(hits)} matching adopters based on your search. Check out the top matches below!"
+            else:
+                return f"Found {len(hits)} matching dogs. Take a look at these great matches!"
+
+    # ========================================
     # GENERAL TEXT GENERATION
     # ========================================
     async def generate_response(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
