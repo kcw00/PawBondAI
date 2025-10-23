@@ -441,8 +441,38 @@ class MedicalEvent(TypedDict):
 
 class ExtractedMedicalData(TypedDict):
     medical_events: List[MedicalEvent]
-    past_conditions: List[str]
-    active_treatments: List[str]
-    severity_score: int
-    adoption_readiness: Literal["ready", "needs_treatment", "long_term_care"]
-    medical_summary: str
+
+
+# Chat History Models
+class ChatSession(BaseModel):
+    """Represents a chat session with message history"""
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    messages: List[ChatMessage] = []
+    metadata: Optional[Dict[str, Any]] = None  # User info, tags, etc.
+
+
+class ChatHistoryResponse(BaseModel):
+    """Response for fetching chat history"""
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+    messages: List[ChatMessage]
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ChatSessionListResponse(BaseModel):
+    """Response for listing all chat sessions"""
+    sessions: List[Dict[str, Any]]  # [{session_id, created_at, message_count, preview}]
+    total: int
+
+
+class SaveMessageRequest(BaseModel):
+    """Request to save a chat message"""
+    session_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    intent: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None

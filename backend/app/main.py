@@ -6,7 +6,7 @@ warnings.filterwarnings("ignore", message="Field name .* shadows an attribute in
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import routes, dogs, knowledge, case_studies, chat, applications, outcomes, analytics
+from app.api import routes, dogs, knowledge, case_studies, chat, chat_history, applications, outcomes, analytics
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -47,6 +47,7 @@ app.include_router(
 app.include_router(outcomes.router, prefix=f"{api_v1_prefix}/outcomes", tags=["outcomes"])
 app.include_router(analytics.router, prefix=f"{api_v1_prefix}/analytics", tags=["analytics"])
 app.include_router(chat.router, prefix=f"{api_v1_prefix}/chat", tags=["chat"])
+app.include_router(chat_history.router, prefix=f"{api_v1_prefix}/chat/history", tags=["chat-history"])
 
 
 @app.get("/")

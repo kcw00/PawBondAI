@@ -1,10 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from app.services.matching_service import matching_service
 from app.services.vertex_gemini_service import vertex_gemini_service
+from app.services.storage_service import storage_service
 from app.core.agent import agent
 from app.models.schemas import ChatRequest, AnalyzeApplicationRequest
+from app.core.logger import setup_logger
+import uuid
 
 router = APIRouter()
+logger = setup_logger(__name__)
 
 
 # Chat Endpoints
@@ -15,8 +19,23 @@ async def handle_chat_message(request: ChatRequest):
     """
     Main conversational endpoint
     Determines intent and routes to appropriate service or AI agent
+    Automatically saves all messages to Google Cloud Storage for history
     """
     try:
+        # Generate or use existing session_id
+        session_id = request.context.get("session_id") if request.context else None
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            logger.info(f"Generated new session ID: {session_id}")
+
+        # Save user message to GCS
+        storage_service.save_chat_message(
+            session_id=session_id,
+            role="user",
+            content=request.message,
+            metadata=request.context
+        )
+
         # Detect intent using Vertex Gemini
         intent = await vertex_gemini_service.detect_intent(request.message)
 
@@ -24,7 +43,7 @@ async def handle_chat_message(request: ChatRequest):
         if intent["type"] == "find_adopters":
             # Use matching service for adopter search
             search_results = await matching_service.find_adopters(
-                query=request.message, filters=intent.get("filters")
+                query=request.message, filters=intent.get("filters"), limit=intent.get("limit")
             )
 
             # Let Gemini format the results into natural language
@@ -34,9 +53,19 @@ async def handle_chat_message(request: ChatRequest):
                 search_type="adopters"
             )
 
+            # Save AI response to GCS
+            storage_service.save_chat_message(
+                session_id=session_id,
+                role="assistant",
+                content=formatted_text,
+                intent=intent["type"],
+                metadata={"total_matches": len(search_results.get("hits", []))}
+            )
+
             return {
                 "success": True,
                 "intent": intent["type"],
+                "session_id": session_id,
                 "response": {
                     "text": formatted_text,  # Gemini's natural language response
                     "matches": search_results.get("hits", []),  # Structured data for cards
@@ -48,7 +77,17 @@ async def handle_chat_message(request: ChatRequest):
         elif intent["type"] == "analyze_application":
             # Use matching service for application analysis
             result = await matching_service.analyze_application(request.message)
-            return {"success": True, "intent": intent["type"], "response": result}
+
+            # Save AI response to GCS
+            storage_service.save_chat_message(
+                session_id=session_id,
+                role="assistant",
+                content="Application analysis completed",
+                intent=intent["type"],
+                metadata=result
+            )
+
+            return {"success": True, "intent": intent["type"], "session_id": session_id, "response": result}
 
         else:
             # Check if this is a dog info query or similar cases query
@@ -77,18 +116,36 @@ async def handle_chat_message(request: ChatRequest):
                     session_id=session_id,
                     context=request.context,
                 )
+
+                # Save AI response to GCS
+                storage_service.save_chat_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=str(result["response"]),
+                    intent="dog_info_with_tools"
+                )
+
                 return {
                     "success": True,
                     "intent": "dog_info_with_tools",
                     "response": result["response"],
-                    "session_id": result["session_id"],
+                    "session_id": session_id,
                 }
             else:
                 # General question - use basic Gemini
                 result = await vertex_gemini_service.generate_response(
                     prompt=request.message, context=request.context
                 )
-                return {"success": True, "intent": "general", "response": result}
+
+                # Save AI response to GCS
+                storage_service.save_chat_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=result,
+                    intent="general"
+                )
+
+                return {"success": True, "intent": "general", "session_id": session_id, "response": result}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
