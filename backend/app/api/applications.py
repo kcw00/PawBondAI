@@ -8,6 +8,7 @@ import io
 from app.models.schemas import ApplicationCreate, ApplicationResponse
 from app.models.es_documents import Application
 from app.services.elasticsearch_client import es_client
+from app.services.language_service import detect_language
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 from elasticsearch.dsl import AsyncSearch, Q
@@ -407,6 +408,9 @@ async def upload_and_index_csv(file: UploadFile = File(...)):
                 doc.animal_applied_for = row.get("animal_applied_for", None)
                 doc.status = row.get("status", "Pending")
                 doc.submitted_at = datetime.now()
+                
+                # Detect language from motivation text
+                doc.language = await detect_language(doc.motivation)
 
                 # Save to Elasticsearch
                 await doc.save(using=es_client.client)

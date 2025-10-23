@@ -93,6 +93,7 @@ class CaseStudy(AsyncDocument):
     visibility = Keyword()
     is_shareable = Boolean()
     date_published = Date()
+    language = Keyword()  # Detected language code (e.g., 'en', 'ko', 'es')
 
     created_at = Date()
     updated_at = Date()
@@ -131,6 +132,9 @@ class Dog(AsyncDocument):
 
     # Media
     photos = Keyword(multi=True)
+
+    # Language
+    language = Keyword()  # Detected language code (e.g., 'en', 'ko', 'es')
 
     # Timestamps
     created_at = Date()
@@ -178,6 +182,7 @@ class Application(AsyncDocument):
     # Application metadata
     animal_applied_for = Keyword()  # e.g., "A77889-Scout"
     status = Keyword()  # "Pending", "Approved", "Rejected"
+    language = Keyword()  # Detected language code (e.g., 'en', 'ko', 'es')
     submitted_at = Date()
 
     class Index:
@@ -225,6 +230,7 @@ class RescueAdoptionOutcome(AsyncDocument):
     match_score_at_adoption = Float()  # Original compatibility score
 
     # Metadata
+    language = Keyword()  # Detected language code (e.g., 'en', 'ko', 'es')
     created_at = Date()
     created_by = Keyword()
 
@@ -236,4 +242,63 @@ class RescueAdoptionOutcome(AsyncDocument):
         """Override save to set timestamps"""
         if not self.created_at:
             self.created_at = datetime.now()
+        return super().save(**kwargs)
+
+
+class MedicalDocument(AsyncDocument):
+    """
+    Elasticsearch Document model for medical documents (vet records, prescriptions, etc.)
+    """
+
+    # Basic document info
+    title = Text(fields={"raw": Keyword()})
+    document_type = Keyword()  # "vet_record", "prescription", "lab_result", "vaccination", "surgery_report", "other"
+    content = Text(analyzer="standard")  # Extracted text from document
+    
+    # Animal association
+    dog_id = Keyword()  # Associated dog
+    dog_name = Text(fields={"keyword": Keyword()})
+    
+    # Medical details
+    diagnosis = Text()
+    treatment = Text()
+    medications = Keyword(multi=True)
+    procedures = Keyword(multi=True)
+    
+    # Provider info
+    veterinarian_name = Text()
+    clinic_name = Text()
+    clinic_location = Text()
+    
+    # Dates
+    document_date = Date()  # Date of the medical event/visit
+    upload_date = Date()
+    
+    # File metadata
+    filename = Keyword()
+    file_type = Keyword()  # "pdf", "image", "docx", etc.
+    file_size = Integer()  # in bytes
+    
+    # Classification
+    severity = Keyword()  # "routine", "moderate", "severe", "emergency"
+    category = Keyword()  # "preventive", "diagnostic", "treatment", "follow_up"
+    
+    # Metadata
+    tags = Keyword(multi=True)
+    notes = Text()
+    language = Keyword()  # Detected language code (e.g., 'en', 'ko', 'es')
+    created_at = Date()
+    updated_at = Date()
+
+    class Index:
+        name = settings.medical_documents_index
+        # No settings for serverless - managed by Elasticsearch
+
+    def save(self, **kwargs):
+        """Override save to set timestamps"""
+        if not self.created_at:
+            self.created_at = datetime.now()
+        self.updated_at = datetime.now()
+        if not self.upload_date:
+            self.upload_date = datetime.now()
         return super().save(**kwargs)

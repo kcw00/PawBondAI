@@ -291,13 +291,17 @@ RULES:
             score = hit.get("_score", 0)
 
             if search_type == "adopters":
+                # Use translated motivation if available (for multilingual support)
+                motivation_text = source.get("translated_motivation", source.get("motivation", ""))[:200]
+                language_info = f" [Original: {source.get('language_name', 'English')}]" if source.get("original_language", "en") != "en" else ""
+                
                 matches_summary.append({
                     "rank": i,
-                    "name": source.get("applicant_name", "Unknown"),
+                    "name": source.get("applicant_name", "Unknown") + language_info,
                     "score": round(score, 3),
                     "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(", "),
                     "housing": source.get("housing_type", ""),
-                    "motivation": source.get("motivation", "")[:200],  # First 200 chars
+                    "motivation": motivation_text,  # Translated if non-English
                     "experience": source.get("experience_level", ""),
                     "employment": source.get("employment_status", ""),
                 })
@@ -313,14 +317,17 @@ RULES:
 
         prompt = f"""You are a helpful rescue coordinator AI assistant. A user searched for: "{query}"
 
-I found {len(hits)} matching {search_type} using Elasticsearch semantic search. Here are the top {len(matches_summary)} matches:
+I found {len(hits)} matching {search_type} using Elasticsearch semantic search with multilingual support. Here are the top {len(matches_summary)} matches:
 
 {json.dumps(matches_summary, indent=2)}
+
+Note: Applications marked with [Original: Language] were submitted in that language and automatically translated for you.
 
 Write a friendly, conversational response (2-3 sentences) that:
 1. Confirms how many matches were found
 2. Highlights what makes the top matches relevant to the query
-3. Encourages the user to review the detailed match cards
+3. If any matches are from non-English applications, briefly mention the multilingual capability
+4. Encourages the user to review the detailed match cards
 
 Be warm and helpful. Don't repeat the technical data - that will be shown in cards below your message.
 Don't use markdown formatting. Keep it natural and conversational.
@@ -341,6 +348,188 @@ Don't use markdown formatting. Keep it natural and conversational.
                 return f"Found {len(hits)} matching adopters based on your search. Check out the top matches below!"
             else:
                 return f"Found {len(hits)} matching dogs. Take a look at these great matches!"
+
+    # ========================================
+    # TRANSLATION
+    # ========================================
+    async def translate_text(
+        self,
+        text: str,
+        target_language: str = "English",
+        source_language: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Translate text using Gemini's multilingual capabilities.
+
+        Args:
+            text: The text to translate
+            target_language: Target language name (e.g., "English", "Spanish", "Korean", "Chinese")
+            source_language: Source language (if None, will auto-detect)
+
+        Returns:
+            Dictionary with translated_text, source_language, target_language
+        """
+        source_lang_prompt = f"from {source_language}" if source_language else "(detect the source language)"
+
+        prompt = f"""You are a professional translator specializing in animal welfare and adoption documentation.
+
+Translate the following text {source_lang_prompt} to {target_language}.
+
+Text to translate:
+{text}
+
+Return ONLY valid JSON (no markdown fences):
+{{
+  "translated_text": "the translated text here",
+  "source_language": "detected or provided source language",
+  "target_language": "{target_language}",
+  "confidence": 0.0-1.0
+}}
+
+RULES:
+- Preserve all technical terms, medical conditions, and proper nouns appropriately
+- Maintain the tone and meaning of the original text
+- For animal welfare context: keep professional and compassionate tone
+- If text is already in target language, return it as-is with confidence 1.0
+"""
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+            )
+            response_text = (response.text or "").strip()
+
+            # Clean markdown fences
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(lines[1:-1]).strip()
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+
+            result = json.loads(response_text)
+            logger.info(f"Translation complete: {result.get('source_language', 'unknown')} -> {target_language}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error translating text: {e}")
+            return {
+                "translated_text": text,
+                "source_language": source_language or "unknown",
+                "target_language": target_language,
+                "confidence": 0.0,
+                "error": str(e)
+            }
+
+    # ========================================
+    # BATCH TRANSLATION FOR RAG
+    # ========================================
+    async def batch_translate_to_english(
+        self,
+        items: list[Dict[str, Any]],
+        text_field: str = "text",
+        language_field: str = "language"
+    ) -> list[Dict[str, Any]]:
+        """
+        Batch translate multiple documents to English for RAG pipeline.
+        Only translates non-English documents; preserves English documents as-is.
+        
+        Args:
+            items: List of documents with text and language fields
+            text_field: Field name containing the text to translate
+            language_field: Field name containing the language code
+            
+        Returns:
+            List of documents with translated text in 'translated_text' field
+        """
+        try:
+            # Separate English and non-English items
+            english_items = []
+            non_english_items = []
+            
+            for item in items:
+                lang = item.get(language_field, 'en')
+                if lang == 'en' or not lang:
+                    # Keep English items as-is
+                    item['translated_text'] = item.get(text_field, '')
+                    item['translation_needed'] = False
+                    english_items.append(item)
+                else:
+                    item['translation_needed'] = True
+                    non_english_items.append(item)
+            
+            if not non_english_items:
+                logger.info("All items are in English, no translation needed")
+                return items
+            
+            logger.info(f"Translating {len(non_english_items)} items to English (keeping {len(english_items)} English items)")
+            
+            # Batch translation prompt
+            batch_texts = []
+            for idx, item in enumerate(non_english_items):
+                text = item.get(text_field, '')
+                lang = item.get(language_field, 'unknown')
+                batch_texts.append(f"[ITEM_{idx}] ({lang}):\n{text}\n")
+            
+            prompt = f"""Translate the following documents to English. Each document is marked with [ITEM_N].
+Return the translations in the same order, using the same [ITEM_N] markers.
+
+Documents:
+{chr(10).join(batch_texts)}
+
+RULES:
+- Preserve the meaning and context accurately
+- Keep proper nouns (names, places) unchanged
+- Maintain the same formatting and structure
+- Return ONLY the translated text for each item with its [ITEM_N] marker
+- Do not add explanations or comments
+
+Format:
+[ITEM_0]
+<translated text>
+
+[ITEM_1]
+<translated text>
+"""
+            
+            response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+            )
+            
+            response_text = (response.text or "").strip()
+            
+            # Parse the batch response
+            import re
+            item_pattern = r'\[ITEM_(\d+)\]\s*\n(.*?)(?=\[ITEM_|\Z)'
+            matches = re.findall(item_pattern, response_text, re.DOTALL)
+            
+            # Map translations back to items
+            for match in matches:
+                idx = int(match[0])
+                translated = match[1].strip()
+                if idx < len(non_english_items):
+                    non_english_items[idx]['translated_text'] = translated
+            
+            # Fallback: if parsing failed, translate one-by-one
+            for item in non_english_items:
+                if 'translated_text' not in item:
+                    logger.warning(f"Batch translation failed for item, falling back to individual translation")
+                    text = item.get(text_field, '')
+                    lang = item.get(language_field, 'unknown')
+                    individual_result = await self.translate_text(text, target_language='English', source_language=lang)
+                    item['translated_text'] = individual_result.get('translated_text', text)
+            
+            # Combine and return
+            all_items = english_items + non_english_items
+            logger.info(f"Batch translation complete: {len(non_english_items)} items translated")
+            return all_items
+            
+        except Exception as e:
+            logger.error(f"Error in batch translation: {e}")
+            # Fallback: mark all as untranslated
+            for item in items:
+                if 'translated_text' not in item:
+                    item['translated_text'] = item.get(text_field, '')
+            return items
 
     # ========================================
     # GENERAL TEXT GENERATION

@@ -476,3 +476,20 @@ class SaveMessageRequest(BaseModel):
     content: str
     intent: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+# Translation Models
+class TranslationRequest(BaseModel):
+    """Request to translate text using Gemini's multilingual capabilities"""
+    text: str = Field(..., description="Text to translate")
+    target_language: str = Field(default="English", description="Target language name (e.g., 'English', 'Spanish', 'Korean', 'Chinese')")
+    source_language: Optional[str] = Field(None, description="Source language name (if None, will auto-detect)")
+
+
+class TranslationResponse(BaseModel):
+    """Response from translation service"""
+    translated_text: str = Field(..., description="The translated text")
+    source_language: str = Field(..., description="Detected or provided source language")
+    target_language: str = Field(..., description="Target language")
+    confidence: float = Field(..., description="Translation confidence score (0.0-1.0)")
+    error: Optional[str] = Field(None, description="Error message if translation failed")
