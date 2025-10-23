@@ -9,7 +9,6 @@ import NotFound from "./pages/NotFound";
 import CardShowcase from "./pages/CardShowcase";
 import DataManagementPage from "./pages/DataManagementPage";
 import DogProfilePage from "./pages/DogProfilePage";
-import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import ChatHistoryPage from "./pages/ChatHistoryPage";
 
 const queryClient = new QueryClient();
@@ -25,7 +24,6 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/data-management" element={<DataManagementPage />} />
-              <Route path="/analytics" element={<AnalyticsDashboard />} />
               <Route path="/chat-history" element={<ChatHistoryPage />} />
               <Route path="/card-showcase" element={<CardShowcase />} />
               <Route path="/dogs/:id" element={<DogProfilePage />} />
