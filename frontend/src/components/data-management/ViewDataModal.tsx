@@ -15,7 +15,7 @@ interface ViewDataModalProps {
   open: boolean;
   onClose: () => void;
   data: any[];
-  type: 'applications' | 'dogs' | 'cases';
+  type: 'applications' | 'dogs' | 'cases' | 'medical';
 }
 
 export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps) => {
@@ -39,6 +39,8 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
         return 'Indexed Dog Profiles';
       case 'cases':
         return 'Indexed Outcomes';
+      case 'medical':
+        return 'Indexed Medical Documents';
     }
   };
 
@@ -283,6 +285,107 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
     );
   };
 
+  const renderMedicalRow = (item: any, index: number) => {
+    const isExpanded = expandedRows.has(index);
+    return (
+      <div key={index} className="border-b border-border last:border-0">
+        <div
+          className="p-4 hover:bg-muted/50 cursor-pointer flex items-start justify-between"
+          onClick={() => toggleRow(index)}
+        >
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-semibold text-foreground">{item.title || 'Untitled Document'}</h4>
+              <Badge variant="outline" className="text-xs">
+                {item.document_type || 'other'}
+              </Badge>
+              {item.severity && (
+                <Badge 
+                  variant="outline" 
+                  className={`text-xs ${
+                    item.severity === 'emergency' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+                    item.severity === 'severe' ? 'bg-warning/20 text-warning border-warning/30' :
+                    'bg-muted/20'
+                  }`}
+                >
+                  {item.severity}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Dog: {item.dog_name || 'N/A'} • {item.filename || 'No filename'}
+            </p>
+            {!isExpanded && item.notes && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                {item.notes.substring(0, 100)}...
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" size="sm" className="ml-2">
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        </div>
+        {isExpanded && (
+          <div className="px-4 pb-4 space-y-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              {item.veterinarian_name && (
+                <div>
+                  <span className="text-muted-foreground">Veterinarian:</span>
+                  <span className="ml-2 text-foreground">{item.veterinarian_name}</span>
+                </div>
+              )}
+              {item.clinic_name && (
+                <div>
+                  <span className="text-muted-foreground">Clinic:</span>
+                  <span className="ml-2 text-foreground">{item.clinic_name}</span>
+                </div>
+              )}
+              {item.document_date && (
+                <div>
+                  <span className="text-muted-foreground">Date:</span>
+                  <span className="ml-2 text-foreground">{new Date(item.document_date).toLocaleDateString()}</span>
+                </div>
+              )}
+              {item.category && (
+                <div>
+                  <span className="text-muted-foreground">Category:</span>
+                  <span className="ml-2 text-foreground">{item.category}</span>
+                </div>
+              )}
+              {item.file_type && (
+                <div>
+                  <span className="text-muted-foreground">File Type:</span>
+                  <span className="ml-2 text-foreground">{item.file_type.toUpperCase()}</span>
+                </div>
+              )}
+              {item.file_size && (
+                <div>
+                  <span className="text-muted-foreground">File Size:</span>
+                  <span className="ml-2 text-foreground">{(item.file_size / 1024).toFixed(2)} KB</span>
+                </div>
+              )}
+            </div>
+            {item.notes && (
+              <div className="mt-2 p-2 bg-muted/30 rounded">
+                <p className="text-muted-foreground font-semibold mb-1">Notes:</p>
+                <p className="text-foreground">{item.notes}</p>
+              </div>
+            )}
+            {item.content && (
+              <div className="mt-2 p-2 bg-muted/30 rounded max-h-32 overflow-y-auto">
+                <p className="text-muted-foreground font-semibold mb-1">Extracted Content:</p>
+                <p className="text-foreground text-[10px] whitespace-pre-wrap">{item.content.substring(0, 500)}{item.content.length > 500 ? '...' : ''}</p>
+              </div>
+            )}
+            <div className="text-muted-foreground text-[10px] mt-2">
+              ID: {item.id}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderRow = (item: any, index: number) => {
     switch (type) {
       case 'applications':
@@ -291,6 +394,8 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
         return renderDogRow(item, index);
       case 'cases':
         return renderOutcomeRow(item, index);
+      case 'medical':
+        return renderMedicalRow(item, index);
     }
   };
 

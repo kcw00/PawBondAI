@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Dog, BookOpen, Upload, ArrowLeft, Sparkles } from "lucide-react";
+import { FileText, Dog, BookOpen, Upload, ArrowLeft, Sparkles, FileHeart } from "lucide-react";
 import { IndexStatusWidget } from "@/components/data-management/IndexStatusWidget";
 import { UploadModal } from "@/components/data-management/UploadModal";
 import { PipelineSteps } from "@/components/data-management/PipelineSteps";
@@ -15,24 +15,25 @@ interface RecentUpload {
   filename: string;
   count: number;
   timestamp: string;
-  type: 'applications' | 'dogs' | 'cases';
+  type: 'applications' | 'dogs' | 'cases' | 'medical';
 }
 
 export default function DataManagementPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'applications' | 'dogs' | 'cases'>('applications');
+  const [activeTab, setActiveTab] = useState<'applications' | 'dogs' | 'cases' | 'medical'>('applications');
   const [showEmbeddingPreview, setShowEmbeddingPreview] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([]);
   const [viewDataModal, setViewDataModal] = useState<{
     open: boolean;
     data: any[];
-    type: 'applications' | 'dogs' | 'cases';
+    type: 'applications' | 'dogs' | 'cases' | 'medical';
   }>({ open: false, data: [], type: 'applications' });
   const [indexedCounts, setIndexedCounts] = useState({
     applications: 0,
     dogs: 0,
     cases: 0,
+    medical: 0,
   });
   const [uploadProgress, setUploadProgress] = useState<{
     isUploading: boolean;
@@ -40,12 +41,13 @@ export default function DataManagementPage() {
     totalRows: number;
     currentRow: number;
     stage: 'uploading' | 'parsing' | 'extracting' | 'embedding' | 'indexing' | 'complete';
-    type: 'applications' | 'dogs' | 'cases';
+    type: 'applications' | 'dogs' | 'cases' | 'medical';
   } | null>(null);
 
   const applicationsInputRef = useRef<HTMLInputElement>(null);
   const dogsInputRef = useRef<HTMLInputElement>(null);
   const casesInputRef = useRef<HTMLInputElement>(null);
+  const medicalInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch indexed counts on mount
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function DataManagementPage() {
             applications: data.applications_count,
             dogs: data.dogs_count,
             cases: data.outcomes_count,
+            medical: data.medical_documents_count || 0,
           });
         }
       } catch (error) {
@@ -67,7 +70,7 @@ export default function DataManagementPage() {
     fetchCounts();
   }, [refreshTrigger]);
 
-  const processFile = async (file: File, type: 'applications' | 'dogs' | 'cases') => {
+  const processFile = async (file: File, type: 'applications' | 'dogs' | 'cases' | 'medical') => {
 
     // Set initial upload state
     setUploadProgress({
@@ -88,7 +91,9 @@ export default function DataManagementPage() {
         ? '/api/v1/applications/csv/upload'
         : type === 'dogs'
           ? '/api/v1/dogs/bulk-upload'
-          : '/api/v1/outcomes/csv/upload'; // cases endpoint
+          : type === 'medical'
+            ? '/api/v1/medical-documents/upload'
+            : '/api/v1/outcomes/csv/upload'; // cases endpoint
 
       setUploadProgress(prev => prev ? { ...prev, stage: 'parsing' } : null);
 
@@ -151,7 +156,7 @@ export default function DataManagementPage() {
     }
   };
 
-  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases') => async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases' | 'medical') => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     await processFile(file, type);
@@ -162,7 +167,7 @@ export default function DataManagementPage() {
     event.stopPropagation();
   };
 
-  const handleDrop = (type: 'applications' | 'dogs' | 'cases') => async (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (type: 'applications' | 'dogs' | 'cases' | 'medical') => async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -172,7 +177,7 @@ export default function DataManagementPage() {
     await processFile(file, type);
   };
 
-  const handleDownloadTemplate = (type: 'applications' | 'dogs' | 'cases') => {
+  const handleDownloadTemplate = (type: 'applications' | 'dogs' | 'cases' | 'medical') => {
     // Create CSV template based on type
     let csvContent = '';
     let filename = '';
@@ -185,10 +190,14 @@ export default function DataManagementPage() {
       csvContent = 'name,breed,age,medical_history,weight_kg,sex\n';
       csvContent += 'Buddy,Golden Retriever,3,No major issues,25,Male\n';
       filename = 'dogs_template.csv';
-    } else {
+    } else if (type === 'cases') {
       csvContent = 'dog_id,application_id,outcome,outcome_reason,success_factors,adoption_date\n';
       csvContent += 'dog-123,app-456,success,Great match,Patient owner with experience,2024-01-15\n';
       filename = 'outcomes_template.csv';
+    } else {
+      csvContent = 'title,document_type,dog_name,document_date,severity,notes\n';
+      csvContent += 'Annual Checkup,vet_record,Buddy,2024-01-15,routine,Healthy dog with no issues\n';
+      filename = 'medical_template.csv';
     }
 
     // Create download link
@@ -202,13 +211,15 @@ export default function DataManagementPage() {
     toast.success(`Template downloaded: ${filename}`);
   };
 
-  const handleViewIndexedData = async (type: 'applications' | 'dogs' | 'cases') => {
+  const handleViewIndexedData = async (type: 'applications' | 'dogs' | 'cases' | 'medical') => {
     try {
       let endpoint = '';
       if (type === 'applications') {
         endpoint = 'http://localhost:8000/api/v1/applications?limit=10';
       } else if (type === 'dogs') {
         endpoint = 'http://localhost:8000/api/v1/dogs?limit=10';
+      } else if (type === 'medical') {
+        endpoint = 'http://localhost:8000/api/v1/medical-documents?limit=10';
       } else {
         endpoint = 'http://localhost:8000/api/v1/outcomes?limit=10';
       }
@@ -322,6 +333,19 @@ export default function DataManagementPage() {
               }}
             >
               Outcomes
+            </button>
+            <button
+              className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'medical'
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              onClick={() => {
+                setActiveTab('medical');
+                const element = document.getElementById('medical-section');
+                element?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              Medical Docs
             </button>
           </div>
         </div>
@@ -615,6 +639,96 @@ export default function DataManagementPage() {
                     <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
                     <div className="space-y-2">
                       {recentUploads.filter(u => u.type === 'cases').slice(0, 3).map((upload, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-medium text-foreground">{upload.filename} ({upload.count} rows)</p>
+                            <p className="text-muted-foreground">Uploaded: {formatTimestamp(upload.timestamp)}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">✓</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Card 4: Medical Documents */}
+            <Card id="medical-section" className="p-6 bg-card border-border scroll-mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <FileHeart className="h-6 w-6 text-[#718355]" />
+                  <div>
+                    <h2 className="text-xl font-bold text-foreground">Medical Documents</h2>
+                    <p className="text-sm text-muted-foreground">Vet records, prescriptions, and medical history</p>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">
+                  ✅ {indexedCounts.medical} indexed
+                </Badge>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-[#CFE1B9]/20 p-4 rounded-lg">
+                  <p className="text-sm font-semibold text-foreground mb-2">Why this matters:</p>
+                  <p className="text-xs text-muted-foreground">
+                    Medical documentation helps track health history and ensure proper care for each dog.
+                  </p>
+                </div>
+
+                <div
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#718355] hover:bg-[#718355]/5 transition-colors cursor-pointer"
+                  onClick={() => medicalInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('medical')}
+                >
+                  <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground mb-1">Upload medical documents</p>
+                  <p className="text-xs text-muted-foreground mb-3">PDF, images, or CSV files</p>
+                  <Button variant="outline" size="sm">Browse Files</Button>
+                  <input
+                    ref={medicalInputRef}
+                    type="file"
+                    accept=".csv,.pdf,.jpg,.jpeg,.png,.docx"
+                    className="hidden"
+                    onChange={handleFileUpload('medical')}
+                  />
+                </div>
+
+                <div className="bg-muted/30 p-4 rounded-lg space-y-2">
+                  <p className="text-sm font-semibold text-foreground mb-2">Accepted formats:</p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>• PDF files (vet records, prescriptions)</p>
+                    <p>• Images (JPG, PNG of medical documents)</p>
+                    <p>• CSV (bulk medical history uploads)</p>
+                    <p>• DOCX (text-based medical reports)</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDownloadTemplate('medical')}
+                  >
+                    Download Template
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleViewIndexedData('medical')}
+                  >
+                    View Indexed Data
+                  </Button>
+                </div>
+
+                {recentUploads.filter(u => u.type === 'medical').length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
+                    <div className="space-y-2">
+                      {recentUploads.filter(u => u.type === 'medical').slice(0, 3).map((upload, idx) => (
                         <div key={idx} className="flex items-center justify-between text-xs">
                           <div>
                             <p className="font-medium text-foreground">{upload.filename} ({upload.count} rows)</p>

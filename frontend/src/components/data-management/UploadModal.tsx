@@ -8,7 +8,7 @@ interface UploadModalProps {
   totalRows: number;
   currentRow: number;
   stage: 'uploading' | 'parsing' | 'extracting' | 'embedding' | 'indexing' | 'complete';
-  type: 'applications' | 'dogs' | 'cases';
+  type: 'applications' | 'dogs' | 'cases' | 'medical';
   onClose: () => void;
 }
 
@@ -18,7 +18,8 @@ export const UploadModal = ({ fileName, totalRows, currentRow, stage, type, onCl
   const typeLabels = {
     applications: 'applications',
     dogs: 'dogs',
-    cases: 'success cases'
+    cases: 'success cases',
+    medical: 'medical documents'
   };
 
   const stages = [
