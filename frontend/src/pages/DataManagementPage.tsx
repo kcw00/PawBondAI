@@ -227,18 +227,18 @@ export default function DataManagementPage() {
       console.log(`Fetching ${type} from:`, endpoint);
       const response = await fetch(endpoint);
       console.log(`Response status for ${type}:`, response.status);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Error response for ${type}:`, errorText);
         throw new Error(`Failed to fetch data: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log(`Received ${type} data:`, data);
       console.log(`Data length:`, data.length);
       console.log(`Data type:`, Array.isArray(data) ? 'array' : typeof data);
-      
+
       // Open modal with data
       setViewDataModal({ open: true, data, type });
       toast.success(`Fetched ${data.length || 0} ${type} records`);
@@ -353,6 +353,20 @@ export default function DataManagementPage() {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+            {/* Pipeline Visualization - Applies to All Data Types */}
+            <div className="p-4 bg-muted/30 rounded-lg border border-border">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">Elastic–Vertex AI Indexing Pipeline</p>
+                <Badge variant="outline" className="text-[10px] px-1.5 h-5 bg-success/10 text-success border-success/30">
+                  All stages complete
+                </Badge>
+              </div>
+              <PipelineSteps currentStep={5} showModels={true} />
+              <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                This pipeline applies to all data types: Applications, Dogs, Outcomes, and Medical Documents
+              </p>
+            </div>
+
             {/* Card 1: Adoption Applications */}
             <Card id="applications-section" className="p-6 bg-card border-border scroll-mt-6">
               <div className="flex items-center justify-between mb-4">
@@ -377,17 +391,6 @@ export default function DataManagementPage() {
                     Vector preview
                   </Button>
                 </div>
-              </div>
-
-              {/* Pipeline Visualization */}
-              <div className="mb-6 p-4 bg-muted/30 rounded-lg border border-border">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground">Elastic–Vertex AI Indexing Pipeline</p>
-                  <Badge variant="outline" className="text-[10px] px-1.5 h-5 bg-success/10 text-success border-success/30">
-                    All stages complete
-                  </Badge>
-                </div>
-                <PipelineSteps currentStep={5} showModels={true} />
               </div>
 
               <div className="space-y-4">
@@ -443,17 +446,17 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleDownloadTemplate('applications')}
                   >
                     Download Template
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleViewIndexedData('applications')}
                   >
@@ -526,17 +529,17 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleDownloadTemplate('dogs')}
                   >
                     Download Template
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleViewIndexedData('dogs')}
                   >
@@ -616,17 +619,17 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleDownloadTemplate('cases')}
                   >
                     Download Template
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleViewIndexedData('cases')}
                   >
@@ -706,17 +709,17 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleDownloadTemplate('medical')}
                   >
                     Download Template
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => handleViewIndexedData('medical')}
                   >
