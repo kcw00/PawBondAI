@@ -125,7 +125,7 @@ export const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<{ type: 'image' | 'document' | 'application', url: string } | null>(null);
-  const [hasData, setHasData] = useState(false);
+  const [hasData, setHasData] = useState(true);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
   const [useMockData, setUseMockData] = useState(true); // Toggle for demo mode
   const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
