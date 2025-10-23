@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { X, ChevronDown, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { X, ChevronDown, ChevronRight, Search } from "lucide-react";
 
 interface ViewDataModalProps {
   open: boolean;
@@ -20,6 +21,8 @@ interface ViewDataModalProps {
 
 export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayCount, setDisplayCount] = useState(10);
 
   const toggleRow = (index: number) => {
     const newExpanded = new Set(expandedRows);
@@ -45,7 +48,60 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
   };
 
   const getDescription = () => {
-    return `Showing ${data.length} most recent ${type} from Elasticsearch`;
+    return `Showing ${filteredData.length} of ${data.length} ${type} from Elasticsearch`;
+  };
+
+  // Filter data based on search query
+  const filteredData = useMemo(() => {
+    if (!searchQuery.trim()) return data;
+
+    const query = searchQuery.toLowerCase();
+    return data.filter(item => {
+      switch (type) {
+        case 'applications':
+          return (
+            item.applicant_name?.toLowerCase().includes(query) ||
+            item.email?.toLowerCase().includes(query) ||
+            item.motivation?.toLowerCase().includes(query) ||
+            item.housing_type?.toLowerCase().includes(query)
+          );
+        case 'dogs':
+          return (
+            item.name?.toLowerCase().includes(query) ||
+            item.breed?.toLowerCase().includes(query) ||
+            item.behavioral_notes?.toLowerCase().includes(query) ||
+            item.combined_profile?.toLowerCase().includes(query)
+          );
+        case 'cases':
+          return (
+            item.dog_id?.toLowerCase().includes(query) ||
+            item.application_id?.toLowerCase().includes(query) ||
+            item.outcome?.toLowerCase().includes(query) ||
+            item.outcome_reason?.toLowerCase().includes(query)
+          );
+        case 'medical':
+          return (
+            item.title?.toLowerCase().includes(query) ||
+            item.dog_name?.toLowerCase().includes(query) ||
+            item.document_type?.toLowerCase().includes(query) ||
+            item.notes?.toLowerCase().includes(query) ||
+            item.veterinarian_name?.toLowerCase().includes(query)
+          );
+        default:
+          return true;
+      }
+    });
+  }, [data, searchQuery, type]);
+
+  // Paginated data
+  const displayedData = useMemo(() => {
+    return filteredData.slice(0, displayCount);
+  }, [filteredData, displayCount]);
+
+  const hasMore = displayCount < filteredData.length;
+
+  const handleLoadMore = () => {
+    setDisplayCount(prev => Math.min(prev + 10, filteredData.length));
   };
 
   const renderApplicationRow = (item: any, index: number) => {
@@ -407,23 +463,55 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
           <DialogDescription className="mt-1">
             {getDescription()}
           </DialogDescription>
+          
+          {/* Search Input */}
+          <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder={`Search ${type}...`}
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setDisplayCount(10); // Reset pagination when searching
+              }}
+              className="pl-9"
+            />
+          </div>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(80vh-120px)]">
+        <ScrollArea className="max-h-[calc(80vh-200px)]">
           {data.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               No data found. Upload some files to get started!
             </div>
+          ) : filteredData.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No results found for "{searchQuery}"
+            </div>
           ) : (
             <div className="divide-y divide-border">
-              {data.map((item, index) => renderRow(item, index))}
+              {displayedData.map((item, index) => renderRow(item, index))}
             </div>
           )}
         </ScrollArea>
 
-        <div className="p-4 border-t border-border bg-muted/30">
+        {/* Footer with Load More and Info */}
+        <div className="p-4 border-t border-border bg-muted/30 space-y-2">
+          {hasMore && (
+            <Button
+              onClick={handleLoadMore}
+              variant="outline"
+              className="w-full"
+            >
+              Load More ({filteredData.length - displayCount} remaining)
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground text-center">
-            Click on any row to expand and view full details
+            {hasMore ? 
+              `Showing ${displayedData.length} of ${filteredData.length} results` : 
+              'Click on any row to expand and view full details'
+            }
           </p>
         </div>
       </DialogContent>
