@@ -11,7 +11,6 @@ import { ApplicationAnalysis } from "./ApplicationAnalysis";
 import { BehavioralAnalysis } from "./BehavioralAnalysis";
 import { toast } from "sonner";
 import { useSearch } from "@/contexts/SearchContext";
-import { LiveMetricsGrid } from "./metrics/LiveMetricsGrid";
 import { useSendMessage, useAnalyzeApplication, useCreateSession } from "@/hooks/useApi";
 import { ApiError } from "@/services/api";
 
@@ -127,7 +126,6 @@ export const ChatInterface = () => {
   const [uploadedFile, setUploadedFile] = useState<{ type: 'image' | 'document' | 'application', url: string } | null>(null);
   const [hasData, setHasData] = useState(true);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
-  const [useMockData, setUseMockData] = useState(true); // Toggle for demo mode
   const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
   const { setSearchType, setCurrentQuery, setShowTrace } = useSearch();
 
@@ -136,9 +134,9 @@ export const ChatInterface = () => {
   const analyzeApplication = useAnalyzeApplication();
   const createSession = useCreateSession();
 
-  // Create new session on mount (Real API mode only)
+  // Create new session on mount
   useEffect(() => {
-    if (!useMockData && !sessionId) {
+    if (!sessionId) {
       createSession.mutateAsync().then((result) => {
         setSessionId(result.session_id);
         console.log("Created new session:", result.session_id);
@@ -146,7 +144,7 @@ export const ChatInterface = () => {
         console.error("Failed to create session:", error);
       });
     }
-  }, [useMockData]);
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -338,23 +336,20 @@ export const ChatInterface = () => {
 
     const lowerInput = input.toLowerCase();
 
-    // Route to real API if not using mock data
-    if (!useMockData) {
-      // Handle application analysis with real API
-      if (uploadedFile?.type === 'application' && uploadedFile.url) {
-        handleRealApplicationAnalysis(uploadedFile.url);
-        setInput("");
-        setUploadedFile(null);
-        setShowApplicationInput(false);
-        return;
-      }
+    // Handle application analysis with real API
+    if (uploadedFile?.type === 'application' && uploadedFile.url) {
+      handleRealApplicationAnalysis(uploadedFile.url);
+      setInput("");
+      setUploadedFile(null);
+      setShowApplicationInput(false);
+      return;
+    }
 
-      // Handle general chat with real API
-      if (input.trim()) {
-        handleRealChatMessage(input);
-        setInput("");
-        return;
-      }
+    // Handle general chat with real API
+    if (input.trim()) {
+      handleRealChatMessage(input);
+      setInput("");
+      return;
     }
 
     // Check for foster report analysis
@@ -724,34 +719,6 @@ Demo mode - use Real API mode for live results`,
 
   return (
     <div className="flex flex-col h-full">
-      {/* API Mode Toggle */}
-      <div className="px-6 pt-4 pb-2 border-b border-border">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-muted-foreground">Data Mode:</span>
-            <Button
-              variant={useMockData ? "default" : "outline"}
-              size="sm"
-              onClick={() => setUseMockData(true)}
-              className="h-8"
-            >
-              Demo Data
-            </Button>
-            <Button
-              variant={!useMockData ? "default" : "outline"}
-              size="sm"
-              onClick={() => setUseMockData(false)}
-              className="h-8"
-            >
-              Real API
-            </Button>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {useMockData ? "Using mock data for demo" : "Connected to backend API"}
-          </div>
-        </div>
-      </div>
-
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {!hasData && messages.length === 1 && (
@@ -791,12 +758,6 @@ Demo mode - use Real API mode for live results`,
         )}
         {(hasData || messages.length > 1) && (
           <>
-            {/* Live Metrics Grid - Only show when there's data */}
-            {messages.length === 1 && (
-              <div className="mb-6">
-                <LiveMetricsGrid />
-              </div>
-            )}
             {messages.map((message) => (
               <div key={message.id}>
                 <MessageBubble message={message} />
