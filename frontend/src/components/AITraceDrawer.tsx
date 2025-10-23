@@ -89,7 +89,7 @@ export const AITraceDrawer = ({ open, onOpenChange, searchType, query }: AITrace
           data: {
             semantic_weight: 0.70,
             structured_weight: 0.30,
-            final_results: 4
+            final_results: 5
           }
         }
       );
