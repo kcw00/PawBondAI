@@ -114,3 +114,31 @@ export const useMatchingMetrics = () => {
     queryFn: () => api.analytics.getMatchingMetrics(),
   });
 };
+
+// Chat History hooks
+export const useCreateSession = () => {
+  return useMutation({
+    mutationFn: () => api.chatHistory.createSession(),
+  });
+};
+
+export const useChatSessions = (limit?: number) => {
+  return useQuery({
+    queryKey: ["chat-sessions", limit],
+    queryFn: () => api.chatHistory.getSessions(limit),
+  });
+};
+
+export const useChatSession = (sessionId: string | null) => {
+  return useQuery({
+    queryKey: ["chat-session", sessionId],
+    queryFn: () => api.chatHistory.getSession(sessionId!),
+    enabled: !!sessionId,
+  });
+};
+
+export const useDeleteSession = () => {
+  return useMutation({
+    mutationFn: (sessionId: string) => api.chatHistory.deleteSession(sessionId),
+  });
+};

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Paperclip, Image as ImageIcon, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +16,7 @@ import { behavioralMatchAdopters, multiCriteriaAdopters, similaritySearchAdopter
 import { toast } from "sonner";
 import { useSearch } from "@/contexts/SearchContext";
 import { LiveMetricsGrid } from "./metrics/LiveMetricsGrid";
-import { useSendMessage, useAnalyzeApplication } from "@/hooks/useApi";
+import { useSendMessage, useAnalyzeApplication, useCreateSession } from "@/hooks/useApi";
 import { ApiError } from "@/services/api";
 
 interface Match {
@@ -118,11 +118,25 @@ export const ChatInterface = () => {
   const [hasData, setHasData] = useState(false);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
   const [useMockData, setUseMockData] = useState(true); // Toggle for demo mode
+  const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
   const { setSearchType, setCurrentQuery, setShowTrace } = useSearch();
 
   // API hooks
   const sendMessage = useSendMessage();
   const analyzeApplication = useAnalyzeApplication();
+  const createSession = useCreateSession();
+
+  // Create new session on mount (Real API mode only)
+  useEffect(() => {
+    if (!useMockData && !sessionId) {
+      createSession.mutateAsync().then((result) => {
+        setSessionId(result.session_id);
+        console.log("Created new session:", result.session_id);
+      }).catch((error) => {
+        console.error("Failed to create session:", error);
+      });
+    }
+  }, [useMockData]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -266,8 +280,13 @@ export const ChatInterface = () => {
     try {
       const result = await sendMessage.mutateAsync({
         message: message,
-        context: {},
+        context: sessionId ? { session_id: sessionId } : {},
       });
+
+      // Update session ID if returned from backend
+      if (result.session_id && result.session_id !== sessionId) {
+        setSessionId(result.session_id);
+      }
 
       // Format the response based on intent
       const formatted = formatApiResponse(result.response, result.intent);

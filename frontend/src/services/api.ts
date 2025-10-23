@@ -156,6 +156,43 @@ export const api = {
     getSuccessRates: () => fetchApi<any>("/analytics/success-rates"),
     getMatchingMetrics: () => fetchApi<any>("/analytics/matching-metrics"),
   },
+
+  // Chat History endpoints
+  chatHistory: {
+    // Create new session
+    createSession: () => fetchApi<{ session_id: string }>("/chat/history/new", {
+      method: "POST",
+    }),
+
+    // Get all sessions
+    getSessions: (limit?: number) => {
+      const params = limit ? `?limit=${limit}` : "";
+      return fetchApi<any>(`/chat/history/sessions${params}`);
+    },
+
+    // Get specific session
+    getSession: (sessionId: string) =>
+      fetchApi<any>(`/chat/history/${sessionId}`),
+
+    // Save message manually
+    saveMessage: (data: {
+      session_id: string;
+      role: "user" | "assistant";
+      content: string;
+      intent?: string;
+      metadata?: any;
+    }) =>
+      fetchApi<any>("/chat/history/save", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    // Delete session
+    deleteSession: (sessionId: string) =>
+      fetchApi<any>(`/chat/history/${sessionId}`, {
+        method: "DELETE",
+      }),
+  },
 };
 
 export { ApiError };
