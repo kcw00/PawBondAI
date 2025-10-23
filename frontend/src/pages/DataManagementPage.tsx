@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,28 +7,67 @@ import { IndexStatusWidget } from "@/components/data-management/IndexStatusWidge
 import { UploadModal } from "@/components/data-management/UploadModal";
 import { PipelineSteps } from "@/components/data-management/PipelineSteps";
 import { EmbeddingPreviewModal } from "@/components/data-management/EmbeddingPreviewModal";
+import { ViewDataModal } from "@/components/data-management/ViewDataModal";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+
+interface RecentUpload {
+  filename: string;
+  count: number;
+  timestamp: string;
+  type: 'applications' | 'dogs' | 'cases';
+}
 
 export default function DataManagementPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'applications' | 'dogs' | 'cases'>('applications');
   const [showEmbeddingPreview, setShowEmbeddingPreview] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([]);
+  const [viewDataModal, setViewDataModal] = useState<{
+    open: boolean;
+    data: any[];
+    type: 'applications' | 'dogs' | 'cases';
+  }>({ open: false, data: [], type: 'applications' });
+  const [indexedCounts, setIndexedCounts] = useState({
+    applications: 0,
+    dogs: 0,
+    cases: 0,
+  });
   const [uploadProgress, setUploadProgress] = useState<{
     isUploading: boolean;
     fileName: string;
     totalRows: number;
     currentRow: number;
     stage: 'uploading' | 'parsing' | 'extracting' | 'embedding' | 'indexing' | 'complete';
+    type: 'applications' | 'dogs' | 'cases';
   } | null>(null);
 
   const applicationsInputRef = useRef<HTMLInputElement>(null);
   const dogsInputRef = useRef<HTMLInputElement>(null);
   const casesInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases') => async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Fetch indexed counts on mount
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/analytics/index-stats');
+        if (response.ok) {
+          const data = await response.json();
+          setIndexedCounts({
+            applications: data.applications_count,
+            dogs: data.dogs_count,
+            cases: data.outcomes_count,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching counts:', error);
+      }
+    };
+    fetchCounts();
+  }, [refreshTrigger]);
+
+  const processFile = async (file: File, type: 'applications' | 'dogs' | 'cases') => {
 
     // Set initial upload state
     setUploadProgress({
@@ -36,7 +75,8 @@ export default function DataManagementPage() {
       fileName: file.name,
       totalRows: 0,
       currentRow: 0,
-      stage: 'uploading'
+      stage: 'uploading',
+      type: type
     });
 
     try {
@@ -47,8 +87,8 @@ export default function DataManagementPage() {
       const uploadEndpoint = type === 'applications'
         ? '/api/v1/applications/csv/upload'
         : type === 'dogs'
-        ? '/api/v1/dogs/bulk-upload'
-        : '/api/v1/outcomes/csv/upload'; // cases endpoint
+          ? '/api/v1/dogs/bulk-upload'
+          : '/api/v1/outcomes/csv/upload'; // cases endpoint
 
       setUploadProgress(prev => prev ? { ...prev, stage: 'parsing' } : null);
 
@@ -90,6 +130,18 @@ export default function DataManagementPage() {
         if (data.failed_count > 0 || data.failed > 0) {
           toast.warning(`${data.failed_count || data.failed} rows failed to index`);
         }
+
+        // Add to recent uploads
+        const newUpload: RecentUpload = {
+          filename: file.name,
+          count: data.indexed_count || data.successful || 0,
+          timestamp: new Date().toISOString(),
+          type: type,
+        };
+        setRecentUploads(prev => [newUpload, ...prev].slice(0, 5));
+
+        // Refresh stats
+        setRefreshTrigger(prev => prev + 1);
       }, 1500);
 
     } catch (error) {
@@ -97,6 +149,103 @@ export default function DataManagementPage() {
       toast.error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setUploadProgress(null);
     }
+  };
+
+  const handleFileUpload = (type: 'applications' | 'dogs' | 'cases') => async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await processFile(file, type);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleDrop = (type: 'applications' | 'dogs' | 'cases') => async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+
+    await processFile(file, type);
+  };
+
+  const handleDownloadTemplate = (type: 'applications' | 'dogs' | 'cases') => {
+    // Create CSV template based on type
+    let csvContent = '';
+    let filename = '';
+
+    if (type === 'applications') {
+      csvContent = 'applicant_name,email,phone,housing_type,has_yard,experience_level,motivation,status\n';
+      csvContent += 'John Doe,john@example.com,555-1234,House,true,Intermediate,I love dogs and want to provide a loving home,Pending\n';
+      filename = 'applications_template.csv';
+    } else if (type === 'dogs') {
+      csvContent = 'name,breed,age,medical_history,weight_kg,sex\n';
+      csvContent += 'Buddy,Golden Retriever,3,No major issues,25,Male\n';
+      filename = 'dogs_template.csv';
+    } else {
+      csvContent = 'dog_id,application_id,outcome,outcome_reason,success_factors,adoption_date\n';
+      csvContent += 'dog-123,app-456,success,Great match,Patient owner with experience,2024-01-15\n';
+      filename = 'outcomes_template.csv';
+    }
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast.success(`Template downloaded: ${filename}`);
+  };
+
+  const handleViewIndexedData = async (type: 'applications' | 'dogs' | 'cases') => {
+    try {
+      let endpoint = '';
+      if (type === 'applications') {
+        endpoint = 'http://localhost:8000/api/v1/applications?limit=10';
+      } else if (type === 'dogs') {
+        endpoint = 'http://localhost:8000/api/v1/dogs?limit=10';
+      } else {
+        endpoint = 'http://localhost:8000/api/v1/outcomes?limit=10';
+      }
+
+      console.log(`Fetching ${type} from:`, endpoint);
+      const response = await fetch(endpoint);
+      console.log(`Response status for ${type}:`, response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error response for ${type}:`, errorText);
+        throw new Error(`Failed to fetch data: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Received ${type} data:`, data);
+      console.log(`Data length:`, data.length);
+      console.log(`Data type:`, Array.isArray(data) ? 'array' : typeof data);
+      
+      // Open modal with data
+      setViewDataModal({ open: true, data, type });
+      toast.success(`Fetched ${data.length || 0} ${type} records`);
+    } catch (error) {
+      console.error(`Error fetching ${type} data:`, error);
+      toast.error(`Failed to fetch ${type} data`);
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
   };
 
   return (
@@ -107,6 +256,7 @@ export default function DataManagementPage() {
           totalRows={uploadProgress.totalRows}
           currentRow={uploadProgress.currentRow}
           stage={uploadProgress.stage}
+          type={uploadProgress.type}
           onClose={() => setUploadProgress(null)}
         />
       )}
@@ -171,7 +321,7 @@ export default function DataManagementPage() {
                 element?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Success Cases
+              Outcomes
             </button>
           </div>
         </div>
@@ -185,13 +335,13 @@ export default function DataManagementPage() {
                 <div className="flex items-center gap-3">
                   <FileText className="h-6 w-6 text-[#718355]" />
                   <div>
-                    <h2 className="text-xl font-bold text-foreground">📋 Adoption Applications</h2>
+                    <h2 className="text-xl font-bold text-foreground">Adoption Applications</h2>
                     <p className="text-sm text-muted-foreground">Primary data source for semantic search</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">
-                    ✅ 203 indexed
+                    ✅ {indexedCounts.applications} indexed
                   </Badge>
                   <Button
                     variant="outline"
@@ -220,6 +370,8 @@ export default function DataManagementPage() {
                 <div
                   className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#718355] hover:bg-[#718355]/5 transition-colors cursor-pointer"
                   onClick={() => applicationsInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('applications')}
                 >
                   <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm font-medium text-foreground mb-1">Drop CSV/Excel/PDF files here</p>
@@ -267,26 +419,40 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDownloadTemplate('applications')}
+                  >
                     Download Template
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleViewIndexedData('applications')}
+                  >
                     View Indexed Data
                   </Button>
                 </div>
 
-                <div className="border-t pt-4">
-                  <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-medium text-foreground">applications_oct2024.csv (203 rows)</p>
-                        <p className="text-muted-foreground">Uploaded: Oct 15, 10:30 AM</p>
-                      </div>
-                      <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">✓</Badge>
+                {recentUploads.filter(u => u.type === 'applications').length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
+                    <div className="space-y-2">
+                      {recentUploads.filter(u => u.type === 'applications').slice(0, 3).map((upload, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-medium text-foreground">{upload.filename} ({upload.count} rows)</p>
+                            <p className="text-muted-foreground">Uploaded: {formatTimestamp(upload.timestamp)}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">✓</Badge>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </Card>
 
@@ -296,12 +462,12 @@ export default function DataManagementPage() {
                 <div className="flex items-center gap-3">
                   <Dog className="h-6 w-6 text-[#718355]" />
                   <div>
-                    <h2 className="text-xl font-bold text-foreground">🐕 Dog Profiles</h2>
+                    <h2 className="text-xl font-bold text-foreground">Dog Profiles</h2>
                     <p className="text-sm text-muted-foreground">Available dogs for adoption</p>
                   </div>
                 </div>
                 <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">
-                  ✅ 127 indexed
+                  ✅ {indexedCounts.dogs} indexed
                 </Badge>
               </div>
 
@@ -309,6 +475,8 @@ export default function DataManagementPage() {
                 <div
                   className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#718355] hover:bg-[#718355]/5 transition-colors cursor-pointer"
                   onClick={() => dogsInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('dogs')}
                 >
                   <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm font-medium text-foreground mb-1">Drop files here or click to browse</p>
@@ -334,28 +502,55 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    Upload
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDownloadTemplate('dogs')}
+                  >
+                    Download Template
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
-                    View Dogs
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleViewIndexedData('dogs')}
+                  >
+                    View Indexed Data
                   </Button>
                 </div>
+
+                {recentUploads.filter(u => u.type === 'dogs').length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
+                    <div className="space-y-2">
+                      {recentUploads.filter(u => u.type === 'dogs').slice(0, 3).map((upload, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-medium text-foreground">{upload.filename} ({upload.count} rows)</p>
+                            <p className="text-muted-foreground">Uploaded: {formatTimestamp(upload.timestamp)}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">✓</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
-            {/* Card 3: Adoption Success Cases */}
+            {/* Card 3: Adoption Cases */}
             <Card id="cases-section" className="p-6 bg-card border-border scroll-mt-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <BookOpen className="h-6 w-6 text-[#718355]" />
                   <div>
-                    <h2 className="text-xl font-bold text-foreground">📚 Adoption Success Cases</h2>
+                    <h2 className="text-xl font-bold text-foreground">Adoption Cases</h2>
                     <p className="text-sm text-muted-foreground">Historical outcomes for pattern learning</p>
                   </div>
                 </div>
                 <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">
-                  ✅ 89 indexed
+                  ✅ {indexedCounts.cases} indexed
                 </Badge>
               </div>
 
@@ -370,9 +565,11 @@ export default function DataManagementPage() {
                 <div
                   className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#718355] hover:bg-[#718355]/5 transition-colors cursor-pointer"
                   onClick={() => casesInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('cases')}
                 >
                   <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm font-medium text-foreground mb-1">Upload success cases</p>
+                  <p className="text-sm font-medium text-foreground mb-1">Upload adoption cases</p>
                   <Button variant="outline" size="sm" className="mt-2">Browse Files</Button>
                   <input
                     ref={casesInputRef}
@@ -395,13 +592,40 @@ export default function DataManagementPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    Upload Cases
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDownloadTemplate('cases')}
+                  >
+                    Download Template
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
-                    View Library
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleViewIndexedData('cases')}
+                  >
+                    View Indexed Data
                   </Button>
                 </div>
+
+                {recentUploads.filter(u => u.type === 'cases').length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-xs font-semibold text-foreground mb-2">Recent uploads:</p>
+                    <div className="space-y-2">
+                      {recentUploads.filter(u => u.type === 'cases').slice(0, 3).map((upload, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-medium text-foreground">{upload.filename} ({upload.count} rows)</p>
+                            <p className="text-muted-foreground">Uploaded: {formatTimestamp(upload.timestamp)}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-[#6a994e]/20 text-[#6a994e]">✓</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -414,8 +638,16 @@ export default function DataManagementPage() {
         onOpenChange={setShowEmbeddingPreview}
       />
 
+      {/* View Data Modal */}
+      <ViewDataModal
+        open={viewDataModal.open}
+        onClose={() => setViewDataModal({ ...viewDataModal, open: false })}
+        data={viewDataModal.data}
+        type={viewDataModal.type}
+      />
+
       {/* Index Status Widget */}
-      <IndexStatusWidget />
+      <IndexStatusWidget refreshTrigger={refreshTrigger} />
     </div>
   );
 }
