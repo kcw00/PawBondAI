@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, PawPrint, FileText, Heart, BarChart3, PanelLeftClose, LineChart, MessageSquare, RefreshCw } from "lucide-react";
+import { Plus, PawPrint, FileText, Heart, BarChart3, PanelLeftClose, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api";
@@ -109,16 +109,6 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
         >
           <BarChart3 className="h-5 w-5 mr-2" />
           Data Management
-        </Button>
-        
-        <Button
-          variant="outline"
-          className="w-full hover:bg-muted/50"
-          size="lg"
-          onClick={() => navigate("/analytics")}
-        >
-          <LineChart className="h-5 w-5 mr-2" />
-          Analytics Dashboard
         </Button>
       </div>
 
