@@ -9,10 +9,6 @@ import { MedicalDocumentCard } from "./cards/MedicalDocumentCard";
 import { SuccessCaseCard } from "./cards/SuccessCaseCard";
 import { ApplicationAnalysis } from "./ApplicationAnalysis";
 import { BehavioralAnalysis } from "./BehavioralAnalysis";
-import { mockPhotoAnalysis, mockMedicalDocument, mockSuccessCases } from "@/data/mockCardData";
-import { mockAnalysisData } from "@/data/mockAnalysisData";
-import { mockBehavioralAnalysis } from "@/data/mockBehavioralData";
-import { behavioralMatchAdopters, multiCriteriaAdopters, similaritySearchAdopters, queryInsights } from "@/data/mockAdopterData";
 import { toast } from "sonner";
 import { useSearch } from "@/contexts/SearchContext";
 import { LiveMetricsGrid } from "./metrics/LiveMetricsGrid";
@@ -33,17 +29,68 @@ interface Match {
   };
 }
 
+interface PhotoAnalysis {
+  breed: string;
+  confidence: number;
+  age: string;
+  healthIndicators: Array<{ label: string; status: string; icon: string }>;
+  personality: string[];
+  recommendations: string[];
+}
+
+interface MedicalDocument {
+  originalLanguage: string;
+  translatedText: string;
+  conditions: string[];
+  medications: string[];
+  processingSteps?: {
+    ocrComplete: boolean;
+    translationComplete: boolean;
+    conditionsIdentified: boolean;
+    casesSearched: boolean;
+  };
+}
+
+interface SuccessCase {
+  caseId: string;
+  dogName: string;
+  breed: string;
+  conditions: string[];
+  adopter: string;
+  outcome: string;
+  timeToAdoption: string;
+  similarity: number;
+}
+
+interface ApplicationAnalysis {
+  applicant_name: string;
+  score: number;
+  strengths: string[];
+  concerns: string[];
+  recommendation: string;
+  similar_adopters: any[];
+}
+
+interface BehavioralAnalysis {
+  dog_name: string;
+  week: number;
+  progress_score: number;
+  behavioral_metrics: any;
+  similar_cases: any[];
+  recommendations: string[];
+}
+
 interface Message {
   id: number;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
   matches?: Match[];
-  photoAnalysis?: typeof mockPhotoAnalysis;
-  medicalDocument?: typeof mockMedicalDocument;
-  successCases?: typeof mockSuccessCases;
-  applicationAnalysis?: typeof mockAnalysisData;
-  behavioralAnalysis?: typeof mockBehavioralAnalysis;
+  photoAnalysis?: PhotoAnalysis;
+  medicalDocument?: MedicalDocument;
+  successCases?: SuccessCase[];
+  applicationAnalysis?: ApplicationAnalysis;
+  behavioralAnalysis?: BehavioralAnalysis;
   attachedImage?: string;
   attachedDocument?: string;
   isProcessing?: boolean;
@@ -69,43 +116,6 @@ Try asking:
 • "Who are our best adopters similar to Emily Rodriguez?"
 • Paste a foster report for behavioral analysis`,
     timestamp: new Date(),
-  },
-];
-
-const mockMatches = [
-  {
-    name: "Sarah Chen",
-    location: "Seattle, WA",
-    housing: "House with yard",
-    score: 92,
-    highlights: [
-      "Works from home (great for separation anxiety!)",
-      "Previously fostered anxious dogs",
-      "Patient, calm lifestyle",
-    ],
-    explanation: {
-      semantic: 0.89,
-      reason: "Semantic relevance: 0.89 (mentioned 'patient with anxious behaviors')",
-      structured: "Works from home (addresses separation anxiety)",
-      experience: "Successfully adopted anxious rescue in 2022",
-    },
-  },
-  {
-    name: "Michael Torres",
-    location: "Portland, OR",
-    housing: "House with fenced yard",
-    score: 88,
-    highlights: [
-      "Retired teacher, home all day",
-      "Experience with senior dogs",
-      "Quiet neighborhood",
-    ],
-    explanation: {
-      semantic: 0.86,
-      reason: "Strong match for senior dogs with anxiety needs",
-      structured: "Retired = consistent presence",
-      experience: "15+ years of dog ownership",
-    },
   },
 ];
 
@@ -346,11 +356,11 @@ export const ChatInterface = () => {
         return;
       }
     }
-    
+
     // Check for foster report analysis
     if ((lowerInput.includes('foster report') || lowerInput.includes('foster update')) ||
-        (lowerInput.includes('week') && (lowerInput.includes('luna') || lowerInput.includes('hiding') || lowerInput.includes('tail wag')))) {
-      
+      (lowerInput.includes('week') && (lowerInput.includes('luna') || lowerInput.includes('hiding') || lowerInput.includes('tail wag')))) {
+
       const userMessage: Message = {
         id: messages.length + 1,
         role: "user" as const,
@@ -391,22 +401,22 @@ I've analyzed Luna's Week 3 foster report and compared it to similar cases in ou
 
 Based on Elasticsearch analysis of 8 similar cases, Luna is on track for adoption readiness in 5-7 weeks with an 89% success rate.`,
             timestamp: new Date(),
-            behavioralAnalysis: mockBehavioralAnalysis,
+            // Demo mode - would show real behavioral analysis from API
           };
           setMessages((prev) => [...prev, analysisMessage]);
           setIsLoading(false);
         }, 2000);
       }, 500);
-      
+
       return;
     }
-    
+
     // Check for behavioral matching query
-    if ((lowerInput.includes('separation anxiety') || 
-         lowerInput.includes('anxious') || 
-         lowerInput.includes('anxiety')) && 
-        (lowerInput.includes('adopter') || lowerInput.includes('handle') || lowerInput.includes('find'))) {
-      
+    if ((lowerInput.includes('separation anxiety') ||
+      lowerInput.includes('anxious') ||
+      lowerInput.includes('anxiety')) &&
+      (lowerInput.includes('adopter') || lowerInput.includes('handle') || lowerInput.includes('find'))) {
+
       const userMessage: Message = {
         id: messages.length + 1,
         role: "user" as const,
@@ -431,18 +441,18 @@ Using Elasticsearch hybrid search:
 • Structured: employment_status, previous_experience
 • Ranked by: success rate with anxious dogs
 
-Found ${behavioralMatchAdopters.length} qualified adopters:`,
+Demo mode - use Real API mode for live results`,
           timestamp: new Date(),
-          matches: behavioralMatchAdopters,
+          matches: [],
           searchType: 'behavioral',
         };
         setMessages((prev) => [...prev, aiMessage]);
-        
+
         setTimeout(() => {
           const summaryMessage: Message = {
             id: messages.length + 3,
             role: "assistant" as const,
-            content: `All ${behavioralMatchAdopters.length} have track records with anxious dogs - Elasticsearch shows 91% success rate with this group.`,
+            content: `Switch to Real API mode to see live results from your Elasticsearch database.`,
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, summaryMessage]);
@@ -453,10 +463,10 @@ Found ${behavioralMatchAdopters.length} qualified adopters:`,
     }
 
     // Check for multi-criteria search
-    if ((lowerInput.includes('work from home') || lowerInput.includes('wfh')) && 
-        lowerInput.includes('yard') && 
-        (lowerInput.includes('senior') || lowerInput.includes('medical'))) {
-      
+    if ((lowerInput.includes('work from home') || lowerInput.includes('wfh')) &&
+      lowerInput.includes('yard') &&
+      (lowerInput.includes('senior') || lowerInput.includes('medical'))) {
+
       const userMessage: Message = {
         id: messages.length + 1,
         role: "user" as const,
@@ -484,9 +494,9 @@ Elasticsearch Query Construction:
   • has_yard = true
   • senior_experience = true
 
-Found ${multiCriteriaAdopters.length} perfect matches:`,
+Demo mode - use Real API mode for live results`,
           timestamp: new Date(),
-          matches: multiCriteriaAdopters,
+          matches: [],
           searchType: 'multiCriteria',
         };
         setMessages((prev) => [...prev, aiMessage]);
@@ -496,9 +506,9 @@ Found ${multiCriteriaAdopters.length} perfect matches:`,
     }
 
     // Check for similarity search
-    if ((lowerInput.includes('similar') || lowerInput.includes('like')) && 
-        (lowerInput.includes('emily') || lowerInput.includes('adopter'))) {
-      
+    if ((lowerInput.includes('similar') || lowerInput.includes('like')) &&
+      (lowerInput.includes('emily') || lowerInput.includes('adopter'))) {
+
       const userMessage: Message = {
         id: messages.length + 1,
         role: "user" as const,
@@ -523,18 +533,18 @@ Using Elasticsearch vector search on Emily's profile:
 • Adoption outcome: successful
 • Dog type: anxious senior
 
-Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
+Demo mode - use Real API mode for live results`,
           timestamp: new Date(),
-          matches: similaritySearchAdopters,
+          matches: [],
           searchType: 'similarity',
         };
         setMessages((prev) => [...prev, aiMessage]);
-        
+
         setTimeout(() => {
           const summaryMessage: Message = {
             id: messages.length + 3,
             role: "assistant" as const,
-            content: `All ${similaritySearchAdopters.length} have successful adoptions with similar dog types. This profile has a 94% success rate.`,
+            content: `Switch to Real API mode to see live results from your Elasticsearch database.`,
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, summaryMessage]);
@@ -555,7 +565,7 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
       setMessages((prev) => [...prev, userMessage]);
       setInput("");
       setShowApplicationInput(true);
-      
+
       setTimeout(() => {
         const aiMessage: Message = {
           id: messages.length + 2,
@@ -606,9 +616,9 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
           const analysisMessage: Message = {
             id: messages.length + 3,
             role: "assistant" as const,
-            content: "📊 Application Analysis Complete",
+            content: "📊 Application Analysis Complete - Demo mode. Use Real API mode for live analysis.",
             timestamp: new Date(),
-            applicationAnalysis: mockAnalysisData,
+            // Demo mode - would show real analysis from API
           };
           setMessages((prev) => [...prev, analysisMessage]);
           setIsLoading(false);
@@ -620,24 +630,14 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
         const aiMessage: Message = {
           id: messages.length + 2,
           role: "assistant" as const,
-          content: `I analyzed the photo of this dog:\n\n🔍 AI Analysis:`,
+          content: `Photo analysis - Demo mode. Use Real API mode for live photo analysis with Google Cloud Vision API.`,
           timestamp: new Date(),
-          photoAnalysis: mockPhotoAnalysis,
+          // Demo mode - would show real photo analysis from API
         };
         setMessages((prev) => [...prev, aiMessage]);
         setIsLoading(false);
 
-        // After 2 seconds, show search for adopters
-        setTimeout(() => {
-          const followUpMessage: Message = {
-            id: messages.length + 3,
-            role: "assistant" as const,
-            content: `Based on the analysis, I'm searching for adopters who prefer senior golden retrievers with calm temperaments...`,
-            timestamp: new Date(),
-            matches: mockMatches.slice(0, 2),
-          };
-          setMessages((prev) => [...prev, followUpMessage]);
-        }, 2000);
+        // Demo mode - no follow-up in demo mode
       }, 1500);
     } else if (currentUpload?.type === 'document') {
       // Medical document processing
@@ -646,10 +646,13 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
         const processingMessage: Message = {
           id: messages.length + 2,
           role: "assistant" as const,
-          content: `I've received Luna's Korean veterinary record. Processing now...`,
+          content: `Medical document processing - Demo mode. Use Real API mode for live OCR and translation.`,
           timestamp: new Date(),
           medicalDocument: {
-            ...mockMedicalDocument,
+            originalLanguage: "Korean",
+            translatedText: "Demo mode",
+            conditions: [],
+            medications: [],
             processingSteps: {
               ocrComplete: false,
               translationComplete: false,
@@ -674,12 +677,12 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
               if (currentStep === 2) steps.translationComplete = true;
               if (currentStep === 3) steps.conditionsIdentified = true;
               if (currentStep === 4) steps.casesSearched = true;
-              
+
               lastMsg.medicalDocument = {
                 ...lastMsg.medicalDocument,
                 processingSteps: steps
               };
-              
+
               if (currentStep === 4) {
                 lastMsg.isProcessing = false;
                 clearInterval(processingInterval);
@@ -694,9 +697,9 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
           const successMessage: Message = {
             id: messages.length + 3,
             role: "assistant" as const,
-            content: `Good news! I found dogs with similar medical conditions who were successfully adopted:\n\n📊 Pattern Analysis - What These Success Stories Tell Us:\n\nCommon Adopter Traits:\n• 🏠 Work from home or retired (73% of cases)\n• 💰 Financial stability for medical costs (100% required)\n• 🎓 Previous experience with medical-needs dogs (81%)\n• ⏰ Patient personality, long-term mindset (100%)\n• 🏥 Some medical knowledge helpful (not required)\n\n✨ Luna's chances: Excellent! Her friendly temperament + young age (estimated 3 years) make her highly adoptable with the right match.\n\nSuccess Rate Data:\n• Dogs with heartworm + malnutrition: 89% adoption success rate\n• Average time to adoption: 4.3 months (during/after treatment)`,
+            content: `Demo mode - Use Real API mode to search historical success cases in your database.`,
             timestamp: new Date(),
-            successCases: mockSuccessCases,
+            successCases: [],
           };
           setMessages((prev) => [...prev, successMessage]);
         }, 4500);
@@ -704,14 +707,14 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
         setIsLoading(false);
       }, 1500);
     } else {
-      // Regular text response
+      // Regular text response - Demo mode
       setTimeout(() => {
         const aiMessage: Message = {
           id: messages.length + 2,
           role: "assistant" as const,
-          content: `I found 8 applications that match well. Here are the top 3:`,
+          content: `Demo mode - Switch to Real API mode to search your adopter database.`,
           timestamp: new Date(),
-          matches: mockMatches.slice(0, 2),
+          matches: [],
         };
         setMessages((prev) => [...prev, aiMessage]);
         setIsLoading(false);
@@ -753,8 +756,8 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {!hasData && messages.length === 1 && (
           <div className="flex items-center justify-center h-full">
-            <div className="max-w-md w-full border border-border rounded-lg p-8 text-center space-y-6" 
-                 style={{ background: 'var(--gradient-welcome)' }}>
+            <div className="max-w-md w-full border border-border rounded-lg p-8 text-center space-y-6"
+              style={{ background: 'var(--gradient-welcome)' }}>
               <div className="text-4xl mb-2">👋</div>
               <h2 className="text-2xl font-bold text-foreground">Welcome to RescueAI!</h2>
               <p className="text-muted-foreground">
@@ -788,66 +791,66 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
         )}
         {(hasData || messages.length > 1) && (
           <>
-        {/* Live Metrics Grid - Only show when there's data */}
-        {messages.length === 1 && (
-          <div className="mb-6">
-            <LiveMetricsGrid />
-          </div>
-        )}
-        {messages.map((message) => (
-          <div key={message.id}>
-            <MessageBubble message={message} />
-            {message.photoAnalysis && (
-              <div className="mt-4">
-                <PhotoAnalysisCard analysis={message.photoAnalysis} />
+            {/* Live Metrics Grid - Only show when there's data */}
+            {messages.length === 1 && (
+              <div className="mb-6">
+                <LiveMetricsGrid />
               </div>
             )}
-            {message.medicalDocument && (
-              <div className="mt-4">
-                <MedicalDocumentCard 
-                  document={message.medicalDocument} 
-                  isProcessing={message.isProcessing}
-                />
+            {messages.map((message) => (
+              <div key={message.id}>
+                <MessageBubble message={message} />
+                {message.photoAnalysis && (
+                  <div className="mt-4">
+                    <PhotoAnalysisCard analysis={message.photoAnalysis} />
+                  </div>
+                )}
+                {message.medicalDocument && (
+                  <div className="mt-4">
+                    <MedicalDocumentCard
+                      document={message.medicalDocument}
+                      isProcessing={message.isProcessing}
+                    />
+                  </div>
+                )}
+                {message.successCases && (
+                  <div className="mt-4 space-y-3">
+                    {message.successCases.map((successCase, idx) => (
+                      <SuccessCaseCard
+                        key={idx}
+                        successCase={successCase}
+                        onViewFullCase={() => toast.info(`Opening case ${successCase.caseId}`)}
+                        onSeeAdopterProfile={() => toast.info("Opening adopter profile")}
+                      />
+                    ))}
+                  </div>
+                )}
+                {message.applicationAnalysis && (
+                  <div className="mt-4">
+                    <ApplicationAnalysis {...message.applicationAnalysis} />
+                  </div>
+                )}
+                {message.behavioralAnalysis && (
+                  <div className="mt-4">
+                    <BehavioralAnalysis data={message.behavioralAnalysis} />
+                  </div>
+                )}
+                {message.matches && (
+                  <div className="mt-4 space-y-3">
+                    {message.matches.map((match, idx) => (
+                      <MatchCard key={idx} match={match} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex items-center space-x-2 text-muted-foreground">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
+                <span className="text-sm">Analyzing with Google Cloud AI...</span>
               </div>
             )}
-            {message.successCases && (
-              <div className="mt-4 space-y-3">
-                {message.successCases.map((successCase, idx) => (
-                  <SuccessCaseCard 
-                    key={idx} 
-                    successCase={successCase}
-                    onViewFullCase={() => toast.info(`Opening case ${successCase.caseId}`)}
-                    onSeeAdopterProfile={() => toast.info("Opening adopter profile")}
-                  />
-                ))}
-              </div>
-            )}
-            {message.applicationAnalysis && (
-              <div className="mt-4">
-                <ApplicationAnalysis {...message.applicationAnalysis} />
-              </div>
-            )}
-            {message.behavioralAnalysis && (
-              <div className="mt-4">
-                <BehavioralAnalysis data={message.behavioralAnalysis} />
-              </div>
-            )}
-            {message.matches && (
-              <div className="mt-4 space-y-3">
-                {message.matches.map((match, idx) => (
-                  <MatchCard key={idx} match={match} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-        {isLoading && (
-          <div className="flex items-center space-x-2 text-muted-foreground">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
-            <span className="text-sm">Analyzing with Google Cloud AI...</span>
-          </div>
-        )}
-        </>
+          </>
         )}
       </div>
 
@@ -872,7 +875,7 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
                 }}
               />
               <div className="flex gap-2">
-                <Button 
+                <Button
                   onClick={() => {
                     if (uploadedFile?.type === 'application') {
                       handleSend();
@@ -884,7 +887,7 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
                   <Send className="h-4 w-4 mr-2" />
                   Analyze Application
                 </Button>
-                <Button 
+                <Button
                   onClick={() => {
                     setShowApplicationInput(false);
                     setUploadedFile(null);
@@ -926,9 +929,9 @@ Found ${similaritySearchAdopters.length} adopters with similar profiles:`,
               accept="image/*,.pdf,.doc,.docx"
               className="hidden"
             />
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               className="mb-2 hover:bg-muted/50"
               onClick={() => fileInputRef.current?.click()}
               title="Upload photo or document"
