@@ -319,3 +319,83 @@ async def trigger_bigquery_sync():
             "message": "BigQuery sync not available (setup required)",
             "error": str(e),
         }
+
+
+# Index Statistics Endpoint
+@router.get("/index-stats")
+async def get_index_statistics():
+    """
+    Get real-time statistics from Elasticsearch indices
+    Returns document counts and recent activity for data management dashboard
+    """
+    try:
+        # Count documents in each index
+        applications_search = AsyncSearch(using=es_client.client, index=settings.applications_index)
+        applications_count = await applications_search.count()
+
+        dogs_search = AsyncSearch(using=es_client.client, index=settings.dogs_index)
+        dogs_count = await dogs_search.count()
+
+        outcomes_search = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+        outcomes_count = await outcomes_search.count()
+
+        medical_docs_search = AsyncSearch(using=es_client.client, index=settings.medical_documents_index)
+        medical_docs_count = await medical_docs_search.count()
+
+        total_documents = applications_count + dogs_count + outcomes_count + medical_docs_count
+
+        # Get recent activity (last 3 uploads for each index)
+        recent_activity = []
+
+        # Recent applications
+        recent_apps = AsyncSearch(using=es_client.client, index=settings.applications_index)
+        recent_apps = recent_apps.sort("-submitted_at")[0:1]
+        apps_response = await recent_apps.execute()
+        if len(apps_response) > 0:
+            last_app = apps_response[0]
+            recent_activity.append({
+                "type": "applications",
+                "count": applications_count,
+                "timestamp": last_app.submitted_at if hasattr(last_app, "submitted_at") else None,
+            })
+
+        # Recent dogs
+        recent_dogs = AsyncSearch(using=es_client.client, index=settings.dogs_index)
+        recent_dogs = recent_dogs.sort("-rescue_date")[0:1]
+        dogs_response = await recent_dogs.execute()
+        if len(dogs_response) > 0:
+            last_dog = dogs_response[0]
+            recent_activity.append({
+                "type": "dogs",
+                "count": dogs_count,
+                "timestamp": last_dog.rescue_date if hasattr(last_dog, "rescue_date") else None,
+            })
+
+        # Recent outcomes
+        recent_outcomes = AsyncSearch(using=es_client.client, index=settings.outcomes_index)
+        recent_outcomes = recent_outcomes.sort("-created_at")[0:1]
+        outcomes_response = await recent_outcomes.execute()
+        if len(outcomes_response) > 0:
+            last_outcome = outcomes_response[0]
+            recent_activity.append({
+                "type": "outcomes",
+                "count": outcomes_count,
+                "timestamp": last_outcome.created_at if hasattr(last_outcome, "created_at") else None,
+            })
+
+        # Sort by timestamp
+        recent_activity.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
+        return {
+            "total_documents": total_documents,
+            "applications_count": applications_count,
+            "dogs_count": dogs_count,
+            "outcomes_count": outcomes_count,
+            "medical_documents_count": medical_docs_count,
+            "recent_activity": recent_activity[:3],
+            "health_status": "healthy" if total_documents > 0 else "empty",
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting index statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
