@@ -73,16 +73,6 @@ export const MatchCard = ({ match }: MatchCardProps) => {
         ))}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center space-x-2 mb-3">
-        <Button variant="outline" size="sm" className="border-border">
-          View Full Application
-        </Button>
-        <Button size="sm" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-          Start Match Process
-        </Button>
-      </div>
-
       {/* Explanation Toggle */}
       <button
         onClick={() => setShowExplanation(!showExplanation)}
