@@ -51,19 +51,21 @@ class MatchingService:
         }
 
     async def find_adopters(
-        self, query: str, filters: Optional[Dict[str, Any]] = None
+        self, query: str, filters: Optional[Dict[str, Any]] = None, limit: Optional[int] = None
     ) -> Dict[str, Any]:
         """Find matching adopters using hybrid search with structured filters"""
         # Use semantic search on motivation field only
         # Other fields (other_pets_description, family_members) are likely semantic_text too
         # So we'll rely on semantic search + filters for now
+        # Default to 5 results if not specified
+        size = limit if limit is not None else 5
         return await es_service.hybrid_search(
             index=settings.applications_index,
             query=query,
             semantic_field="motivation",
             text_fields=[],  # Empty - no regular text fields to search
             filters=filters,
-            size=20,
+            size=size,
         )
 
     async def find_dogs_for_adopter(

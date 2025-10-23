@@ -366,6 +366,7 @@ User message: "{message}"
 Respond with ONLY valid JSON (no markdown fences):
 {{
   "type": "find_adopters" | "analyze_application" | "general",
+  "limit": number|null,
   "filters": {{
     "has_yard": true|false|null,
     "yard_size_min": number|null,
@@ -378,6 +379,7 @@ Respond with ONLY valid JSON (no markdown fences):
 
 RULES:
 - type: "find_adopters" if searching for adopters/applicants, "analyze_application" if analyzing specific application text, "general" otherwise
+- limit: extract the number of results requested (e.g., "top 3", "best 5", "find 10"); null if not specified (defaults to 5)
 - has_yard: true if query mentions "yard", "garden", "outdoor space", "large property"; false if "no yard", "apartment"; null otherwise
 - yard_size_min: extract minimum square meters if mentioned (convert: small=50, medium=150, large=300); null otherwise
 - experience_levels: extract if query mentions "experienced", "first-time", "professional", "novice", etc.; null otherwise
@@ -386,9 +388,11 @@ RULES:
 - behavioral_keywords: extract keywords related to dog behavior/personality that adopter should handle (anxious, aggressive, shy, energetic, etc.)
 
 Examples:
-- "Find experienced adopters with large yards" -> {{"type": "find_adopters", "filters": {{"experience_levels": ["Experienced", "Professional (Vet/Trainer)"], "yard_size_min": 300}}}}
-- "Find adopters good with anxious dogs" -> {{"type": "find_adopters", "filters": {{"behavioral_keywords": ["anxious"]}}}}
-- "Analyze this application" -> {{"type": "analyze_application", "filters": {{}}}}
+- "Find top 3 adopters for Rocky" -> {{"type": "find_adopters", "limit": 3, "filters": {{}}}}
+- "Find experienced adopters with large yards" -> {{"type": "find_adopters", "limit": null, "filters": {{"experience_levels": ["Experienced", "Professional (Vet/Trainer)"], "yard_size_min": 300}}}}
+- "Find adopters good with anxious dogs" -> {{"type": "find_adopters", "limit": null, "filters": {{"behavioral_keywords": ["anxious"]}}}}
+- "Show me best 5 matches" -> {{"type": "find_adopters", "limit": 5, "filters": {{}}}}
+- "Analyze this application" -> {{"type": "analyze_application", "limit": null, "filters": {{}}}}
 """
             response = await self.client.aio.models.generate_content(
                 model=self.model_id,
