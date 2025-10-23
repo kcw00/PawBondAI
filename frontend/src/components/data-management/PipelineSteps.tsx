@@ -12,35 +12,35 @@ export const PipelineSteps = ({ currentStep = 5, showModels = true }: PipelineSt
       id: 1,
       label: "Upload",
       icon: Upload,
-      model: "Local",
+      model: "FastAPI",
       color: "text-primary"
     },
     {
       id: 2,
-      label: "OCR",
+      label: "Parse",
       icon: FileText,
-      model: "Vision AI",
+      model: "CSV Reader",
       color: "text-primary"
     },
     {
       id: 3,
-      label: "Translation",
-      icon: Languages,
-      model: "Vertex Translation API",
+      label: "Index + Embed",
+      icon: Database,
+      model: "Elasticsearch",
       color: "text-primary"
     },
     {
       id: 4,
-      label: "Embedding",
+      label: "Generate Vectors",
       icon: Sparkles,
-      model: "google_vertex_ai_embedding",
+      model: "ES Inference API",
       color: "text-primary"
     },
     {
       id: 5,
-      label: "Indexed",
-      icon: Database,
-      model: "Elasticsearch",
+      label: "Ready",
+      icon: CheckCircle2,
+      model: "Semantic Search",
       color: "text-success"
     }
   ];
