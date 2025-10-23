@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Path, Query, Body
+from fastapi import APIRouter, HTTPException, Path, Query, Body, UploadFile, File
 from typing import List, Optional
 from datetime import datetime
 import uuid
+import csv
+import io
 
 from app.models.schemas import OutcomeCreate, OutcomeResponse, OutcomeStatsResponse
 from app.models.es_documents import RescueAdoptionOutcome
@@ -407,3 +409,113 @@ async def get_outcome(outcome_id: str = Path(...)):
     except Exception as e:
         logger.error(f"Error getting outcome: {e}")
         raise HTTPException(status_code=404, detail=f"Outcome not found: {str(e)}")
+
+
+# 10. CSV Bulk Upload for outcomes
+@router.post("/csv/upload")
+async def upload_outcomes_csv(file: UploadFile = File(...)):
+    """
+    Bulk upload adoption outcomes via CSV file
+    
+    CSV format:
+    - dog_id (required)
+    - application_id (required)
+    - outcome (required): success or returned
+    - outcome_reason (optional)
+    - success_factors (optional)
+    - failure_factors (optional)
+    - adoption_date (optional)
+    - return_date (optional)
+    - adopter_satisfaction_score (optional)
+    - dog_difficulty_level (optional)
+    - adopter_experience_level (optional)
+    - match_score (optional)
+    """
+    try:
+        # Read and parse CSV
+        content = await file.read()
+        csv_string = content.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(csv_string))
+        rows = list(csv_reader)
+
+        indexed_count = 0
+        failed_count = 0
+        errors = []
+        indexed_ids = []
+
+        for idx, row in enumerate(rows):
+            try:
+                outcome_id = str(uuid.uuid4())
+
+                # Create AsyncDocument instance
+                doc = RescueAdoptionOutcome(meta={"id": outcome_id})
+                doc.outcome_id = outcome_id
+                doc.dog_id = row.get("dog_id", "")
+                doc.application_id = row.get("application_id", "")
+                doc.outcome = row.get("outcome", "success")
+                doc.outcome_reason = row.get("outcome_reason", "")
+                doc.success_factors = row.get("success_factors", "")
+                doc.failure_factors = row.get("failure_factors", "")
+                
+                # Parse dates if provided
+                adoption_date_str = row.get("adoption_date")
+                if adoption_date_str:
+                    try:
+                        doc.adoption_date = datetime.fromisoformat(adoption_date_str)
+                    except ValueError:
+                        doc.adoption_date = datetime.now()
+                else:
+                    doc.adoption_date = datetime.now()
+                
+                return_date_str = row.get("return_date")
+                if return_date_str:
+                    try:
+                        doc.return_date = datetime.fromisoformat(return_date_str)
+                    except ValueError:
+                        doc.return_date = None
+                else:
+                    doc.return_date = None
+                
+                # Parse numeric fields
+                satisfaction = row.get("adopter_satisfaction_score")
+                doc.adopter_satisfaction_score = int(satisfaction) if satisfaction else None
+                
+                match_score = row.get("match_score")
+                doc.match_score_at_adoption = float(match_score) if match_score else None
+                
+                doc.dog_difficulty_level = row.get("dog_difficulty_level", None)
+                doc.adopter_experience_level = row.get("adopter_experience_level", None)
+                doc.created_by = "csv_upload"
+                
+                # Calculate days until return if applicable
+                if doc.return_date and doc.adoption_date:
+                    doc.days_until_return = (doc.return_date - doc.adoption_date).days
+
+                # Save to Elasticsearch
+                await doc.save(using=es_client.client)
+
+                indexed_count += 1
+                indexed_ids.append(outcome_id)
+                logger.info(f"Indexed outcome {outcome_id} from CSV row {idx + 1}")
+
+            except Exception as e:
+                failed_count += 1
+                error_msg = f"Row {idx + 1}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(f"Error indexing row {idx + 1}: {e}")
+
+        # Return summary
+        return {
+            "success": True,
+            "filename": file.filename,
+            "total_rows": len(rows),
+            "indexed_count": indexed_count,
+            "failed_count": failed_count,
+            "indexed_ids": indexed_ids[:10],  # Return first 10 IDs
+            "errors": errors[:5],  # Return first 5 errors
+            "message": f"Successfully indexed {indexed_count} out of {len(rows)} outcomes",
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading outcomes CSV: {e}")
+        raise HTTPException(status_code=500, detail=f"Error uploading CSV: {str(e)}")

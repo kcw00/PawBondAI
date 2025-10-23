@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks,
 from typing import List, Dict, Any
 from datetime import datetime
 import uuid
+import json
 
 from app.models.schemas import (
     DogResponse,
@@ -182,51 +183,69 @@ async def get_dog(dog_id: str):
 async def list_dogs(limit: int = 10):
     """List all dogs using AsyncSearch"""
     try:
-        s = AsyncSearch(using=es_client.client, index="dogs")
+        logger.info(f"Fetching dogs from index: {settings.dogs_index}, limit: {limit}")
+        s = AsyncSearch(using=es_client.client, index=settings.dogs_index)
         s = s.query("match_all")
         s = s.sort("-created_at")
         s = s[0:limit]
 
         response = await s.execute()
+        logger.info(f"Elasticsearch returned {len(response)} hits")
 
         dogs = []
         for hit in response:
             try:
-                dogs.append(
-                    DogResponse(
-                        id=hit.meta.id,
-                        name=hit.name,
-                        breed=hit.breed,
-                        age=hit.age,
-                        weight_kg=hit.weight_kg,
-                        sex=hit.sex,
-                        rescue_date=hit.rescue_date,
-                        adoption_status=hit.adoption_status,
-                        behavioral_notes=hit.behavioral_notes,
-                        combined_profile=hit.combined_profile,
-                        medical_history=(
-                            hit.medical_history
-                            if hasattr(hit, "medical_history") and hit.medical_history
-                            else None
-                        ),
-                        photos=hit.photos if hasattr(hit, "photos") and hit.photos else [],
-                        created_at=(
-                            hit.created_at.isoformat()
-                            if hasattr(hit, "created_at") and hit.created_at
-                            else None
-                        ),
-                        updated_at=(
-                            hit.updated_at.isoformat()
-                            if hasattr(hit, "updated_at") and hit.updated_at
-                            else None
-                        ),
-                    )
-                )
+                # Convert hit to dict using to_dict() method
+                hit_dict = hit.to_dict()
+                
+                # Handle medical_history - can be string or list
+                medical_history = hit_dict.get("medical_history")
+                if isinstance(medical_history, list):
+                    medical_history = " ".join(str(x) for x in medical_history) if medical_history else None
+                
+                # medical_events should now be plain dicts after to_dict()
+                medical_events = hit_dict.get("medical_events")
+                
+                dog_data = {
+                    "id": hit.meta.id,
+                    "name": hit_dict.get("name", "Unknown"),
+                    "breed": hit_dict.get("breed"),
+                    "age": hit_dict.get("age"),
+                    "weight_kg": hit_dict.get("weight_kg"),
+                    "sex": hit_dict.get("sex"),
+                    "rescue_date": hit_dict.get("rescue_date"),
+                    "adoption_status": hit_dict.get("adoption_status", "available"),
+                    "behavioral_notes": hit_dict.get("behavioral_notes"),
+                    "combined_profile": hit_dict.get("combined_profile"),
+                    "medical_history": medical_history,
+                    "photos": hit_dict.get("photos", []),
+                    "medical_events": medical_events,
+                    "past_conditions": hit_dict.get("past_conditions"),
+                    "active_treatments": hit_dict.get("active_treatments"),
+                    "severity_score": hit_dict.get("severity_score"),
+                    "adoption_readiness": hit_dict.get("adoption_readiness"),
+                    "medical_document_ids": hit_dict.get("medical_document_ids"),
+                }
+                
+                # Handle dates
+                if hasattr(hit, "created_at") and hit.created_at:
+                    dog_data["created_at"] = hit.created_at.isoformat() if hasattr(hit.created_at, 'isoformat') else str(hit.created_at)
+                else:
+                    dog_data["created_at"] = None
+                    
+                if hasattr(hit, "updated_at") and hit.updated_at:
+                    dog_data["updated_at"] = hit.updated_at.isoformat() if hasattr(hit.updated_at, 'isoformat') else str(hit.updated_at)
+                else:
+                    dog_data["updated_at"] = None
+                
+                dogs.append(DogResponse(**dog_data))
+                logger.info(f"Successfully parsed dog: {dog_data['name']} ({hit.meta.id})")
             except Exception as e:
-                logger.error(f"Failed to parse dog document {hit.meta.id}: {e}")
+                logger.error(f"Failed to parse dog document {hit.meta.id}: {e}", exc_info=True)
                 # Skip invalid documents
                 continue
 
+        logger.info(f"Returning {len(dogs)} dogs out of {len(response)} hits")
         return dogs
     except Exception as e:
         logger.error(f"Error listing dogs: {e}")
