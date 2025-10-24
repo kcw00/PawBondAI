@@ -127,6 +127,7 @@ export const ChatInterface = () => {
   const [hasData, setHasData] = useState(true);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
+  const [applicantsData, setApplicantsData] = useState<any[]>([]); // Store full applicant data for follow-up queries
   const { setSearchType, setCurrentQuery, setShowTrace, loadedSessionId, loadedMessages, setLoadedSessionId, setTraceData } = useSearch();
 
   // API hooks
@@ -375,7 +376,10 @@ export const ChatInterface = () => {
     try {
       const result = await sendMessage.mutateAsync({
         message: message,
-        context: sessionId ? { session_id: sessionId } : {},
+        context: {
+          ...(sessionId ? { session_id: sessionId } : {}),
+          ...(applicantsData.length > 0 ? { applicants_data: applicantsData } : {}),
+        },
       });
 
       // Update session ID if returned from backend
@@ -396,6 +400,13 @@ export const ChatInterface = () => {
       // Format the response based on intent
       const formatted = formatApiResponse(result.response, result.intent);
       console.log("Formatted matches:", formatted.matches);
+
+      // Store applicants data for follow-up queries
+      if (result.response?.matches && Array.isArray(result.response.matches)) {
+        const fullApplicantsData = result.response.matches.map((hit: any) => hit._source || hit.data || hit);
+        setApplicantsData(fullApplicantsData);
+        console.log("Stored applicants data:", fullApplicantsData);
+      }
 
       const aiMessage: Message = {
         id: messages.length + 2,
@@ -818,7 +829,7 @@ Demo mode - use Real API mode for live results`,
   return (
     <div className="flex flex-col h-full">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-6 space-y-4">
         {!hasData && messages.length === 1 && (
           <div className="flex items-center justify-center h-full">
             <div className="max-w-md w-full border border-border rounded-lg p-8 text-center space-y-6"
