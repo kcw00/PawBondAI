@@ -6,7 +6,7 @@ export const MetricBanner = () => {
     <div className="bg-gradient-to-r from-primary/20 via-success/20 to-primary/20 border-b border-border px-6 py-3">
       <div className="flex items-center justify-between max-w-7xl mx-auto">
         <div className="flex items-center gap-3">
-          {/* RescueAI Mascot - Paw + Heart */}
+          {/* PawBondAI Mascot - Paw + Heart */}
           <div className="relative flex-shrink-0">
             <div className="relative w-8 h-8">
               <Heart className="h-5 w-5 text-secondary absolute top-0 left-0 fill-secondary/20" />
