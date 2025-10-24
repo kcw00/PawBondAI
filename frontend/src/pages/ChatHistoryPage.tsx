@@ -5,18 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { 
-  ArrowLeft, 
-  MessageSquare, 
-  Trash2, 
+import {
+  ArrowLeft,
+  MessageSquare,
+  Trash2,
   Search,
   Calendar,
   User,
   Bot,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  Check,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services/api";
+import { DeleteChatModal } from "@/components/DeleteChatModal";
 
 interface ChatSession {
   session_id: string;
@@ -24,6 +28,7 @@ interface ChatSession {
   updated_at: string;
   message_count: number;
   preview: string;
+  name?: string;
 }
 
 interface ChatMessage {
@@ -43,6 +48,10 @@ export default function ChatHistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null);
 
   useEffect(() => {
     fetchSessions();
@@ -81,25 +90,30 @@ export default function ChatHistoryPage() {
     }
   };
 
-  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (session: ChatSession, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (!confirm("Are you sure you want to delete this chat session?")) {
-      return;
-    }
+    setSessionToDelete(session);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!sessionToDelete) return;
 
     try {
-      await api.chatHistory.deleteSession(sessionId);
+      await api.chatHistory.deleteSession(sessionToDelete.session_id);
       toast.success("Chat session deleted");
-      
+
       // Remove from list
-      setSessions(sessions.filter(s => s.session_id !== sessionId));
-      
+      setSessions(sessions.filter(s => s.session_id !== sessionToDelete.session_id));
+
       // Clear selected if it was deleted
-      if (selectedSession === sessionId) {
+      if (selectedSession === sessionToDelete.session_id) {
         setSelectedSession(null);
         setMessages([]);
       }
+
+      setDeleteModalOpen(false);
+      setSessionToDelete(null);
     } catch (error) {
       console.error("Error deleting session:", error);
       toast.error("Failed to delete session");
@@ -118,15 +132,46 @@ export default function ChatHistoryPage() {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
     });
   };
 
+  const handleStartEdit = (session: ChatSession) => {
+    setEditingId(session.session_id);
+    setEditingName(session.name || session.preview || 'Conversation');
+  };
+
+  const handleSaveEdit = async (sessionId: string) => {
+    if (!editingName.trim()) {
+      toast.error("Chat name cannot be empty");
+      return;
+    }
+
+    try {
+      await api.chatHistory.updateChatName(sessionId, editingName.trim());
+      toast.success("Chat name updated");
+      setEditingId(null);
+      // Update the local state
+      setSessions(sessions.map(s =>
+        s.session_id === sessionId ? { ...s, name: editingName.trim() } : s
+      ));
+    } catch (error) {
+      console.error("Error updating chat name:", error);
+      toast.error("Failed to update chat name");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingName("");
+  };
+
   const filteredSessions = sessions.filter(session =>
+    (session.name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
     session.preview.toLowerCase().includes(searchQuery.toLowerCase()) ||
     session.session_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -182,7 +227,7 @@ export default function ChatHistoryPage() {
             </div>
           </div>
 
-          <ScrollArea className="h-[calc(100vh-280px)]">
+          <ScrollArea className="h-[calc(100vh-280px)] custom-scrollbar">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -197,37 +242,99 @@ export default function ChatHistoryPage() {
                 {filteredSessions.map((session) => (
                   <div
                     key={session.session_id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all hover:bg-muted/50 ${
+                    className={`p-3 rounded-lg border transition-all ${
                       selectedSession === session.session_id
                         ? 'bg-primary/10 border-primary'
-                        : 'bg-card border-border'
+                        : 'bg-card border-border hover:bg-muted/50'
                     }`}
-                    onClick={() => fetchSessionMessages(session.session_id)}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(session.updated_at)}
-                        </span>
+                    {editingId === session.session_id ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit(session.session_id);
+                            if (e.key === 'Escape') handleCancelEdit();
+                          }}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleSaveEdit(session.session_id)}
+                          >
+                            <Check className="h-3 w-3 mr-1 text-green-600" />
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={handleCancelEdit}
+                          >
+                            <X className="h-3 w-3 mr-1 text-red-600" />
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => handleDeleteSession(session.session_id, e)}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-foreground line-clamp-2 mb-2">
-                      {session.preview}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {session.message_count} messages
-                      </Badge>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(session.updated_at)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEdit(session);
+                              }}
+                              title="Edit name"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => handleDeleteClick(session, e)}
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div
+                          className="cursor-pointer"
+                          onClick={() => fetchSessionMessages(session.session_id)}
+                        >
+                          <p className="text-sm text-foreground line-clamp-2 mb-2 font-medium">
+                            {session.name || session.preview}
+                          </p>
+                          {session.name && (
+                            <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
+                              {session.preview}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {session.message_count} messages
+                            </Badge>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -246,7 +353,7 @@ export default function ChatHistoryPage() {
                 </p>
               </div>
 
-              <ScrollArea className="h-[calc(100vh-320px)]">
+              <ScrollArea className="h-[calc(100vh-320px)] custom-scrollbar">
                 {loadingMessages ? (
                   <div className="flex items-center justify-center py-8">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -313,6 +420,14 @@ export default function ChatHistoryPage() {
           )}
         </Card>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteChatModal
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+        chatName={sessionToDelete?.name || sessionToDelete?.preview}
+      />
     </div>
   );
 }

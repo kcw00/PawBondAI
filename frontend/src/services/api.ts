@@ -187,6 +187,13 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
+    // Update chat name
+    updateChatName: (sessionId: string, name: string) =>
+      fetchApi<any>(`/chat/history/${sessionId}/name`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
+
     // Delete session
     deleteSession: (sessionId: string) =>
       fetchApi<any>(`/chat/history/${sessionId}`, {

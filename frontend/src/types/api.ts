@@ -1,5 +1,20 @@
 // API Request/Response Types matching backend schemas
 
+export interface TraceStep {
+  id: string;
+  label: string;
+  status: 'complete' | 'processing' | 'pending';
+  duration?: number;
+  details?: string;
+  data?: any;
+}
+
+export interface TraceData {
+  steps: TraceStep[];
+  total_duration_ms: number;
+  query: string;
+}
+
 export interface ChatRequest {
   message: string;
   context?: Record<string, any>;
@@ -10,6 +25,7 @@ export interface ChatResponse {
   intent: string;
   response: any;
   session_id?: string;
+  trace?: TraceData;
 }
 
 export interface AnalyzeApplicationRequest {
@@ -52,6 +68,7 @@ export interface ApplicationAnalysis {
 export interface AnalyzeApplicationResponse {
   success: boolean;
   analysis: ApplicationAnalysis;
+  trace?: TraceData;
 }
 
 export interface HealthCheckResponse {

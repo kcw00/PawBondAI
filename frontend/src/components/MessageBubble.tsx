@@ -14,45 +14,82 @@ interface MessageBubbleProps {
 }
 
 const formatMarkdown = (text: string) => {
-  // Simple markdown formatting
-  let formatted = text
-    // Bold
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Code blocks
+  // First, handle lists line by line (before inline formatting)
+  const lines = text.split('\n');
+  let inUnorderedList = false;
+  let inOrderedList = false;
+  let processedLines: string[] = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    // Check for unordered list items (*, -, •)
+    if (trimmed.match(/^[\*\-•]\s/)) {
+      if (!inUnorderedList) {
+        if (inOrderedList) {
+          processedLines.push('</ol>');
+          inOrderedList = false;
+        }
+        processedLines.push('<ul class="list-disc list-inside my-2 space-y-1">');
+        inUnorderedList = true;
+      }
+      // Remove the bullet marker and add list item
+      const content = trimmed.substring(1).trim();
+      processedLines.push(`<li class="ml-4">${content}</li>`);
+    }
+    // Check for ordered list items (1., 2., etc.)
+    else if (trimmed.match(/^\d+\.\s/)) {
+      if (!inOrderedList) {
+        if (inUnorderedList) {
+          processedLines.push('</ul>');
+          inUnorderedList = false;
+        }
+        processedLines.push('<ol class="list-decimal list-inside my-2 space-y-1">');
+        inOrderedList = true;
+      }
+      // Remove the number marker and add list item
+      const content = trimmed.replace(/^\d+\.\s/, '');
+      processedLines.push(`<li class="ml-4">${content}</li>`);
+    }
+    // Regular line
+    else {
+      if (inUnorderedList) {
+        processedLines.push('</ul>');
+        inUnorderedList = false;
+      }
+      if (inOrderedList) {
+        processedLines.push('</ol>');
+        inOrderedList = false;
+      }
+      processedLines.push(line);
+    }
+  });
+
+  // Close any open lists
+  if (inUnorderedList) {
+    processedLines.push('</ul>');
+  }
+  if (inOrderedList) {
+    processedLines.push('</ol>');
+  }
+
+  // Join lines back together
+  let formatted = processedLines.join('\n');
+
+  // Now apply inline markdown formatting
+  formatted = formatted
+    // Code blocks (do this first to avoid processing their content)
     .replace(/```(.*?)```/gs, '<pre class="bg-muted p-2 rounded my-2 overflow-x-auto"><code>$1</code></pre>')
     // Inline code
     .replace(/`(.*?)`/g, '<code class="bg-muted px-1 py-0.5 rounded text-sm">$1</code>')
+    // Bold (must come before italic)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // Italic (now only matches single asterisks that aren't at line start)
+    .replace(/\*([^\*\n]+?)\*/g, '<em>$1</em>')
     // Links
     .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-primary underline" target="_blank">$1</a>');
 
-  // Handle lists
-  const lines = formatted.split('\n');
-  let inList = false;
-  let result: string[] = [];
-  
-  lines.forEach((line) => {
-    if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
-      if (!inList) {
-        result.push('<ul class="list-disc list-inside my-2 space-y-1">');
-        inList = true;
-      }
-      result.push(`<li class="ml-4">${line.trim().substring(1).trim()}</li>`);
-    } else {
-      if (inList) {
-        result.push('</ul>');
-        inList = false;
-      }
-      result.push(line);
-    }
-  });
-  
-  if (inList) {
-    result.push('</ul>');
-  }
-  
-  return result.join('\n');
+  return formatted;
 };
 
 export const MessageBubble = ({ message }: MessageBubbleProps) => {

@@ -12,216 +12,23 @@ interface TraceStep {
   data?: any;
 }
 
+interface TraceData {
+  steps: TraceStep[];
+  total_duration_ms: number;
+  query: string;
+}
+
 interface AITraceDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  searchType?: 'behavioral' | 'multiCriteria' | 'similarity' | 'behavioralAnalysis';
-  query?: string;
+  traceData?: TraceData | null;
 }
 
-export const AITraceDrawer = ({ open, onOpenChange, searchType, query }: AITraceDrawerProps) => {
-  // Mock trace data based on search type
-  const getTraceSteps = (): TraceStep[] => {
-    if (!searchType) return [];
-
-    const baseSteps: TraceStep[] = [
-      {
-        id: "intent",
-        label: "Gemini Intent Detection",
-        status: "complete",
-        duration: 145,
-        details: "text-embedding-005",
-        data: {
-          detected_intent: searchType === 'behavioral' ? "adopter_matching" : 
-                          searchType === 'multiCriteria' ? "multi_criteria_search" :
-                          searchType === 'similarity' ? "similarity_search" : "behavioral_analysis",
-          confidence: 0.94,
-          entities: searchType === 'behavioral' ? ["separation anxiety", "experience"] : 
-                   searchType === 'multiCriteria' ? ["work from home", "yard", "senior"] : 
-                   searchType === 'similarity' ? ["Emily Rodriguez"] : ["foster report", "Luna"]
-        }
-      }
-    ];
-
-    if (searchType === 'behavioral') {
-      baseSteps.push(
-        {
-          id: "embedding",
-          label: "Generate Query Embeddings",
-          status: "complete",
-          duration: 89,
-          details: "VertexAI text-embedding-004",
-          data: {
-            dimensions: 768,
-            query_vector: "[0.023, -0.145, 0.891, ...]"
-          }
-        },
-        {
-          id: "elastic-semantic",
-          label: "Elasticsearch Semantic Search",
-          status: "complete",
-          duration: 142,
-          data: {
-            index: "adopters",
-            query_type: "knn",
-            k: 50,
-            num_candidates: 200,
-            vector_field: "application_embedding"
-          }
-        },
-        {
-          id: "elastic-structured",
-          label: "Elasticsearch Structured Filters",
-          status: "complete",
-          duration: 38,
-          data: {
-            filters: [
-              "previous_experience: 'anxious dogs'",
-              "employment_status: 'remote' OR 'retired'"
-            ]
-          }
-        },
-        {
-          id: "rrf",
-          label: "RRF Rank Fusion",
-          status: "complete",
-          duration: 12,
-          data: {
-            semantic_weight: 0.70,
-            structured_weight: 0.30,
-            final_results: 5
-          }
-        }
-      );
-    } else if (searchType === 'multiCriteria') {
-      baseSteps.push(
-        {
-          id: "embedding",
-          label: "Generate Query Embeddings",
-          status: "complete",
-          duration: 92,
-          details: "VertexAI text-embedding-004",
-          data: {
-            dimensions: 768,
-            query_parts: ["experienced senior dogs", "medical needs"]
-          }
-        },
-        {
-          id: "elastic-hybrid",
-          label: "Elasticsearch Hybrid Query",
-          status: "complete",
-          duration: 156,
-          data: {
-            semantic_match: "experienced medical needs senior",
-            structured_filters: [
-              "employment_status = 'remote'",
-              "housing_type = 'house'",
-              "has_yard = true",
-              "senior_experience = true"
-            ]
-          }
-        },
-        {
-          id: "rrf",
-          label: "RRF Rank Fusion",
-          status: "complete",
-          duration: 15,
-          data: {
-            semantic_weight: 0.65,
-            structured_weight: 0.35,
-            final_results: 3
-          }
-        }
-      );
-    } else if (searchType === 'similarity') {
-      baseSteps.push(
-        {
-          id: "profile-fetch",
-          label: "Fetch Reference Profile",
-          status: "complete",
-          duration: 34,
-          data: {
-            adopter_id: "emily_rodriguez",
-            embedding_cached: true
-          }
-        },
-        {
-          id: "elastic-vector",
-          label: "Elasticsearch Vector Search",
-          status: "complete",
-          duration: 128,
-          data: {
-            query_type: "knn",
-            k: 5,
-            similarity: "cosine",
-            min_score: 0.85
-          }
-        },
-        {
-          id: "filter-outcomes",
-          label: "Filter by Success Outcomes",
-          status: "complete",
-          duration: 22,
-          data: {
-            filter: "adoption_outcome = 'successful'",
-            matched: 5
-          }
-        }
-      );
-    } else if (searchType === 'behavioralAnalysis') {
-      baseSteps.push(
-        {
-          id: "extract-patterns",
-          label: "Extract Behavioral Patterns",
-          status: "complete",
-          duration: 234,
-          details: "Gemini 2.5 Flash",
-          data: {
-            patterns_found: 5,
-            progress_indicators: ["reduced hiding", "tail wagging", "approaching"],
-            concerns: ["loud noises", "doorbell"]
-          }
-        },
-        {
-          id: "embedding",
-          label: "Generate Report Embeddings",
-          status: "complete",
-          duration: 98,
-          details: "VertexAI text-embedding-004",
-          data: {
-            dimensions: 768
-          }
-        },
-        {
-          id: "elastic-similar",
-          label: "Find Similar Foster Cases",
-          status: "complete",
-          duration: 167,
-          data: {
-            index: "foster_reports",
-            similar_cases: 8,
-            avg_similarity: 0.87
-          }
-        },
-        {
-          id: "analyze-timeline",
-          label: "Analyze Progress Timeline",
-          status: "complete",
-          duration: 89,
-          data: {
-            current_week: 3,
-            predicted_adoption_ready: "5-7 weeks",
-            confidence: 0.89
-          }
-        }
-      );
-    }
-
-    return baseSteps;
-  };
-
-  const steps = getTraceSteps();
-  const totalDuration = steps.reduce((sum, step) => sum + (step.duration || 0), 0);
+export const AITraceDrawer = ({ open, onOpenChange, traceData }: AITraceDrawerProps) => {
+  // Use real trace data from backend
+  const steps = traceData?.steps || [];
+  const totalDuration = traceData?.total_duration_ms || 0;
+  const query = traceData?.query || "";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

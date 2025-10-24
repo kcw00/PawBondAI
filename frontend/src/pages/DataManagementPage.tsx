@@ -351,7 +351,7 @@ export default function DataManagementPage() {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
             {/* Pipeline Visualization - Applies to All Data Types */}
             <div className="p-4 bg-muted/30 rounded-lg border border-border">

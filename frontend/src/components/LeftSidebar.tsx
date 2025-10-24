@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Plus, PawPrint, FileText, Heart, BarChart3, PanelLeftClose, MessageSquare, RefreshCw } from "lucide-react";
+import { Plus, PawPrint, FileText, Heart, BarChart3, PanelLeftClose, MessageSquare, RefreshCw, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api";
 import { useSearch } from "@/contexts/SearchContext";
 import { toast } from "sonner";
+import { DeleteChatModal } from "@/components/DeleteChatModal";
 
 interface LeftSidebarProps {
   onCollapse: () => void;
@@ -16,6 +17,7 @@ interface ChatSession {
   updated_at: string;
   message_count: number;
   preview: string;
+  name?: string;
 }
 
 export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
@@ -24,6 +26,10 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
   const [recentChats, setRecentChats] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<ChatSession | null>(null);
 
   useEffect(() => {
     fetchRecentChats(true); // Initial load with loading state
@@ -85,13 +91,60 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const handleStartEdit = (chat: ChatSession) => {
+    setEditingId(chat.session_id);
+    setEditingName(chat.name || chat.preview || 'Conversation');
+  };
+
+  const handleSaveEdit = async (sessionId: string) => {
+    if (!editingName.trim()) {
+      toast.error("Chat name cannot be empty");
+      return;
+    }
+
+    try {
+      await api.chatHistory.updateChatName(sessionId, editingName.trim());
+      toast.success("Chat name updated");
+      setEditingId(null);
+      fetchRecentChats(false);
+    } catch (error) {
+      console.error("Error updating chat name:", error);
+      toast.error("Failed to update chat name");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingName("");
+  };
+
+  const handleDeleteClick = (chat: ChatSession) => {
+    setChatToDelete(chat);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!chatToDelete) return;
+
+    try {
+      await api.chatHistory.deleteSession(chatToDelete.session_id);
+      toast.success("Conversation deleted");
+      fetchRecentChats(false);
+      setDeleteModalOpen(false);
+      setChatToDelete(null);
+    } catch (error) {
+      console.error("Error deleting session:", error);
+      toast.error("Failed to delete conversation");
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col bg-background overflow-y-auto">
+    <div className="h-full flex flex-col bg-background overflow-y-auto custom-scrollbar">
       {/* Header */}
       <div className="border-b border-border bg-primary/5 px-4 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Heart className="h-6 w-6 text-[#6a994e] fill-[#6a994e]" />
-          <h2 className="text-lg font-bold text-foreground">RescueAI</h2>
+          <h2 className="text-lg font-bold text-foreground">PawBondAI</h2>
         </div>
         <Button
           variant="ghost"
@@ -162,27 +215,99 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
             </div>
           ) : (
             recentChats.map((chat) => (
-              <button
+              <div
                 key={chat.session_id}
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group"
-                onClick={() => handleLoadSession(chat.session_id)}
+                className="w-full px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors group relative"
               >
-                <p className="text-sm text-foreground truncate mb-1">
-                  {chat.preview || 'Conversation'}
-                </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{formatTime(chat.updated_at)}</span>
-                  <span className="flex items-center">
-                    <MessageSquare className="h-3 w-3 mr-1" />
-                    {chat.message_count}
-                  </span>
-                </div>
-              </button>
+                {editingId === chat.session_id ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      className="flex-1 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveEdit(chat.session_id);
+                        if (e.key === 'Escape') handleCancelEdit();
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleSaveEdit(chat.session_id)}
+                    >
+                      <Check className="h-3 w-3 text-green-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={handleCancelEdit}
+                    >
+                      <X className="h-3 w-3 text-red-600" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <button
+                      className="flex-1 text-left min-w-0"
+                      onClick={() => handleLoadSession(chat.session_id)}
+                    >
+                      <p className="text-sm text-foreground mb-1 break-words line-clamp-2">
+                        {chat.name || chat.preview || 'Conversation'}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatTime(chat.updated_at)}</span>
+                        <span className="flex items-center">
+                          <MessageSquare className="h-3 w-3 mr-1" />
+                          {chat.message_count}
+                        </span>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(chat);
+                        }}
+                        title="Edit name"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(chat);
+                        }}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ))
           )}
         </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteChatModal
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+        chatName={chatToDelete?.name || chatToDelete?.preview}
+      />
     </div>
   );
 };
