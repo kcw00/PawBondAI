@@ -155,6 +155,8 @@ class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
+    intent: Optional[str] = None  # Intent type (find_adopters, analyze_application, etc.)
+    metadata: Optional[Dict[str, Any]] = None  # Matches, analysis results, etc.
     tool_calls: Optional[List[dict]] = None
 
 
