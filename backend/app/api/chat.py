@@ -94,6 +94,7 @@ async def handle_chat_message(request: ChatRequest):
             )
             format_duration = int((time.time() - format_start) * 1000)
 
+<<<<<<< HEAD
             trace_steps.append({
                 "id": "gemini-format",
                 "label": "Gemini Response Formatting",
@@ -106,10 +107,16 @@ async def handle_chat_message(request: ChatRequest):
                 }
             })
 
+=======
+>>>>>>> origin/feature/backend-api
             # Save AI response to GCS with full matches data
             matches_data = search_results.get("hits", [])
             logger.info(f"Saving {len(matches_data)} matches to session {session_id}")
             logger.info(f"First match sample: {matches_data[0] if matches_data else 'None'}")
+<<<<<<< HEAD
+=======
+            
+>>>>>>> origin/feature/backend-api
             storage_service.save_chat_message(
                 session_id=session_id,
                 role="assistant",
@@ -146,6 +153,7 @@ async def handle_chat_message(request: ChatRequest):
             result = await matching_service.analyze_application(request.message)
             analysis_duration = int((time.time() - analysis_start) * 1000)
 
+<<<<<<< HEAD
             trace_steps.append({
                 "id": "analyze-application",
                 "label": "Application Analysis",
@@ -159,6 +167,8 @@ async def handle_chat_message(request: ChatRequest):
                 }
             })
 
+=======
+>>>>>>> origin/feature/backend-api
             # Save AI response to GCS with full analysis data
             storage_service.save_chat_message(
                 session_id=session_id,
