@@ -158,6 +158,8 @@ class ChatMessage(BaseModel):
     intent: Optional[str] = None  # Intent type (find_adopters, analyze_application, etc.)
     metadata: Optional[Dict[str, Any]] = None  # Matches, analysis results, etc.
     tool_calls: Optional[List[dict]] = None
+    intent: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class ChatRequest(BaseModel):
@@ -478,6 +480,11 @@ class SaveMessageRequest(BaseModel):
     content: str
     intent: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class UpdateChatNameRequest(BaseModel):
+    """Request to update chat session name"""
+    name: str = Field(..., min_length=1, max_length=100, description="New name for the chat session")
 
 
 # Translation Models

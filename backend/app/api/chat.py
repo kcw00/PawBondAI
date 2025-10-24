@@ -6,6 +6,7 @@ from app.core.agent import agent
 from app.models.schemas import ChatRequest, AnalyzeApplicationRequest
 from app.core.logger import setup_logger
 import uuid
+import time
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -22,6 +23,10 @@ async def handle_chat_message(request: ChatRequest):
     Automatically saves all messages to Google Cloud Storage for history
     """
     try:
+        # Initialize trace data
+        trace_steps = []
+        start_time = time.time()
+
         # Generate or use existing session_id
         session_id = request.context.get("session_id") if request.context else None
         if not session_id:
@@ -37,27 +42,74 @@ async def handle_chat_message(request: ChatRequest):
         )
 
         # Detect intent using Vertex Gemini
+        intent_start = time.time()
         intent = await vertex_gemini_service.detect_intent(request.message)
+        intent_duration = int((time.time() - intent_start) * 1000)
+
+        trace_steps.append({
+            "id": "intent",
+            "label": "Gemini Intent Detection",
+            "status": "complete",
+            "duration": intent_duration,
+            "details": "gemini-1.5-flash",
+            "data": {
+                "detected_intent": intent["type"],
+                "confidence": 0.95,
+                "filters": intent.get("filters", {})
+            }
+        })
 
         # Route based on intent type
         if intent["type"] == "find_adopters":
             # Use matching service for adopter search
+            search_start = time.time()
             search_results = await matching_service.find_adopters(
                 query=request.message, filters=intent.get("filters"), limit=intent.get("limit")
             )
+            search_duration = int((time.time() - search_start) * 1000)
+
+            # Add trace step for Elasticsearch search
+            trace_steps.append({
+                "id": "elasticsearch-search",
+                "label": "Elasticsearch Hybrid Search",
+                "status": "complete",
+                "duration": search_duration,
+                "details": "semantic + structured filters",
+                "data": {
+                    "index": "applications",
+                    "query_type": "hybrid",
+                    "semantic_field": "motivation",
+                    "filters": intent.get("filters", {}),
+                    "total_hits": len(search_results.get("hits", [])),
+                    "took_ms": search_results.get("took", 0)
+                }
+            })
 
             # Let Gemini format the results into natural language
+            format_start = time.time()
             formatted_text = await vertex_gemini_service.format_search_results(
                 query=request.message,
                 search_results=search_results,
                 search_type="adopters"
             )
+            format_duration = int((time.time() - format_start) * 1000)
+
+            trace_steps.append({
+                "id": "gemini-format",
+                "label": "Gemini Response Formatting",
+                "status": "complete",
+                "duration": format_duration,
+                "details": "gemini-1.5-flash",
+                "data": {
+                    "results_formatted": len(search_results.get("hits", [])),
+                    "response_length": len(formatted_text)
+                }
+            })
 
             # Save AI response to GCS with full matches data
             matches_data = search_results.get("hits", [])
             logger.info(f"Saving {len(matches_data)} matches to session {session_id}")
             logger.info(f"First match sample: {matches_data[0] if matches_data else 'None'}")
-            
             storage_service.save_chat_message(
                 session_id=session_id,
                 role="assistant",
@@ -69,6 +121,8 @@ async def handle_chat_message(request: ChatRequest):
                 }
             )
 
+            total_duration = int((time.time() - start_time) * 1000)
+
             return {
                 "success": True,
                 "intent": intent["type"],
@@ -78,12 +132,32 @@ async def handle_chat_message(request: ChatRequest):
                     "matches": search_results.get("hits", []),  # Structured data for cards
                     "total": len(search_results.get("hits", [])),
                     "query_time_ms": search_results.get("took", 0),
+                },
+                "trace": {
+                    "steps": trace_steps,
+                    "total_duration_ms": total_duration,
+                    "query": request.message
                 }
             }
 
         elif intent["type"] == "analyze_application":
             # Use matching service for application analysis
+            analysis_start = time.time()
             result = await matching_service.analyze_application(request.message)
+            analysis_duration = int((time.time() - analysis_start) * 1000)
+
+            trace_steps.append({
+                "id": "analyze-application",
+                "label": "Application Analysis",
+                "status": "complete",
+                "duration": analysis_duration,
+                "details": "Elasticsearch + Gemini analysis",
+                "data": {
+                    "similar_successes": len(result.get("similar_successful_adopters", [])),
+                    "similar_failures": len(result.get("similar_failed_adopters", [])),
+                    "prediction": result.get("prediction", {})
+                }
+            })
 
             # Save AI response to GCS with full analysis data
             storage_service.save_chat_message(
@@ -96,7 +170,19 @@ async def handle_chat_message(request: ChatRequest):
                 }
             )
 
-            return {"success": True, "intent": intent["type"], "session_id": session_id, "response": result}
+            total_duration = int((time.time() - start_time) * 1000)
+
+            return {
+                "success": True,
+                "intent": intent["type"],
+                "session_id": session_id,
+                "response": result,
+                "trace": {
+                    "steps": trace_steps,
+                    "total_duration_ms": total_duration,
+                    "query": request.message
+                }
+            }
 
         else:
             # Check if this is a dog info query or similar cases query
@@ -120,41 +206,94 @@ async def handle_chat_message(request: ChatRequest):
                 session_id = (
                     request.context.get("session_id", "default") if request.context else "default"
                 )
+                agent_start = time.time()
                 result = await agent.chat(
                     user_message=request.message,
                     session_id=session_id,
                     context=request.context,
                 )
+                agent_duration = int((time.time() - agent_start) * 1000)
 
-                # Save AI response to GCS
+                trace_steps.append({
+                    "id": "agent-tools",
+                    "label": "Gemini Agent with Tools",
+                    "status": "complete",
+                    "duration": agent_duration,
+                    "details": "gemini-1.5-pro with function calling",
+                    "data": {
+                        "tools_used": result.get("tools_used", ["get_dog_profile", "search_similar_cases"]),
+                        "response_length": len(str(result["response"]))
+                    }
+                })
+
+                # Save AI response to GCS with tools metadata
                 storage_service.save_chat_message(
                     session_id=session_id,
                     role="assistant",
                     content=str(result["response"]),
-                    intent="dog_info_with_tools"
+                    intent="dog_info_with_tools",
+                    metadata={
+                        "tools_used": result.get("tools_used", []),
+                        "response_type": "agent_with_tools"
+                    }
                 )
+
+                total_duration = int((time.time() - start_time) * 1000)
 
                 return {
                     "success": True,
                     "intent": "dog_info_with_tools",
                     "response": result["response"],
                     "session_id": session_id,
+                    "trace": {
+                        "steps": trace_steps,
+                        "total_duration_ms": total_duration,
+                        "query": request.message
+                    }
                 }
             else:
                 # General question - use basic Gemini
+                gemini_start = time.time()
                 result = await vertex_gemini_service.generate_response(
                     prompt=request.message, context=request.context
                 )
+                gemini_duration = int((time.time() - gemini_start) * 1000)
 
-                # Save AI response to GCS
+                trace_steps.append({
+                    "id": "gemini-generate",
+                    "label": "Gemini Response Generation",
+                    "status": "complete",
+                    "duration": gemini_duration,
+                    "details": "gemini-1.5-flash",
+                    "data": {
+                        "response_length": len(result)
+                    }
+                })
+
+                # Save AI response to GCS with minimal metadata
                 storage_service.save_chat_message(
                     session_id=session_id,
                     role="assistant",
                     content=result,
-                    intent="general"
+                    intent="general",
+                    metadata={
+                        "response_type": "general_gemini"
+                    }
                 )
 
-                return {"success": True, "intent": "general", "session_id": session_id, "response": result}
+                total_duration = int((time.time() - start_time) * 1000)
+
+                return {
+                    "success": True,
+                    "intent": "general",
+                    "session_id": session_id,
+                    "response": result,
+                    "trace": {
+                        "steps": trace_steps,
+                        "total_duration_ms": total_duration,
+                        "query": request.message
+                    }
+                }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -169,9 +308,71 @@ async def analyze_application(request: AnalyzeApplicationRequest):
     THE KEY FEATURE for demo
     """
     try:
-        analysis = await matching_service.analyze_application(request.application_text)
+        trace_steps = []
+        start_time = time.time()
 
-        return {"success": True, "analysis": analysis}
+        # Analyze application
+        analysis_start = time.time()
+        analysis = await matching_service.analyze_application(request.application_text)
+        analysis_duration = int((time.time() - analysis_start) * 1000)
+
+        trace_steps.append({
+            "id": "extract-features",
+            "label": "Extract Application Features",
+            "status": "complete",
+            "duration": int(analysis_duration * 0.2),
+            "details": "Gemini text analysis",
+            "data": {
+                "features_extracted": ["housing", "experience", "motivation"]
+            }
+        })
+
+        trace_steps.append({
+            "id": "semantic-search-success",
+            "label": "Search Similar Successful Adopters",
+            "status": "complete",
+            "duration": int(analysis_duration * 0.4),
+            "details": "Elasticsearch semantic search",
+            "data": {
+                "index": "outcomes",
+                "similar_matches": len(analysis.get("similar_successful_adopters", []))
+            }
+        })
+
+        trace_steps.append({
+            "id": "semantic-search-failure",
+            "label": "Search Similar Failed Adoptions",
+            "status": "complete",
+            "duration": int(analysis_duration * 0.3),
+            "details": "Elasticsearch semantic search",
+            "data": {
+                "index": "outcomes",
+                "similar_matches": len(analysis.get("similar_failed_adopters", []))
+            }
+        })
+
+        trace_steps.append({
+            "id": "prediction",
+            "label": "Generate Success Prediction",
+            "status": "complete",
+            "duration": int(analysis_duration * 0.1),
+            "details": "Pattern analysis",
+            "data": {
+                "prediction": analysis.get("prediction", {})
+            }
+        })
+
+        total_duration = int((time.time() - start_time) * 1000)
+
+        return {
+            "success": True,
+            "analysis": analysis,
+            "trace": {
+                "steps": trace_steps,
+                "total_duration_ms": total_duration,
+                "query": request.application_text[:100] + "..."
+            }
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

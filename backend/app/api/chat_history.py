@@ -5,7 +5,8 @@ from app.models.schemas import (
     ChatHistoryResponse,
     ChatSessionListResponse,
     ChatMessage,
-    SaveMessageRequest
+    SaveMessageRequest,
+    UpdateChatNameRequest
 )
 from app.core.logger import setup_logger
 import uuid
@@ -70,19 +71,52 @@ async def get_session_history(session_id: str):
         if not history:
             raise HTTPException(status_code=404, detail="Session not found")
 
+        # Include name in metadata
+        metadata = history.get("metadata") or {}
+        if history.get("name"):
+            metadata["name"] = history["name"]
+
+        # Convert messages and log metadata
+        converted_messages = []
+        for i, msg in enumerate(history["messages"]):
+            chat_msg = ChatMessage(**msg)
+            if chat_msg.metadata:
+                logger.info(f"API returning message {i} with metadata keys: {list(chat_msg.metadata.keys())}")
+            converted_messages.append(chat_msg)
+
         return ChatHistoryResponse(
             session_id=history["session_id"],
             created_at=history["created_at"],
             updated_at=history["updated_at"],
             message_count=history["message_count"],
-            messages=[ChatMessage(**msg) for msg in history["messages"]],
-            metadata=history.get("metadata")
+            messages=converted_messages,
+            metadata=metadata if metadata else None
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error retrieving session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{session_id}/name")
+async def update_chat_name(session_id: str, request: UpdateChatNameRequest):
+    """
+    Update the custom name of a chat session
+    """
+    try:
+        success = storage_service.update_chat_name(session_id, request.name)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return {"success": True, "message": f"Chat name updated to '{request.name}'"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating chat name: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

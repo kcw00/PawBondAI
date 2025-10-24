@@ -76,13 +76,24 @@ class StorageService:
                 messages = json.loads(existing_data)
 
             # Add new message
-            messages.append({
+            message_data = {
                 "role": role,
                 "content": content,
                 "intent": intent,
                 "timestamp": datetime.now().isoformat(),
                 "metadata": metadata or {}
-            })
+            }
+            messages.append(message_data)
+
+            # Log metadata for debugging
+            if metadata:
+                logger.info(f"Saving message with metadata keys: {list(metadata.keys())}")
+                if 'matches' in metadata:
+                    logger.info(f"  - Saving {len(metadata['matches'])} matches")
+                if 'applicationAnalysis' in metadata:
+                    logger.info(f"  - Saving applicationAnalysis")
+            else:
+                logger.info("Saving message with no metadata")
 
             # Save back to GCS
             blob.upload_from_string(
@@ -100,7 +111,7 @@ class StorageService:
     def get_chat_history(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve chat history for a session
-        Returns: {session_id, messages: [...], created_at, updated_at}
+        Returns: {session_id, messages: [...], created_at, updated_at, name}
         """
         if not self.bucket:
             return None
@@ -116,10 +127,22 @@ class StorageService:
             data = blob.download_as_text()
             messages = json.loads(data)
 
+            # Log message structure for debugging
+            logger.info(f"Loading {len(messages)} messages for session {session_id}")
+            for i, msg in enumerate(messages):
+                has_metadata = 'metadata' in msg
+                logger.info(f"  Message {i}: role={msg.get('role')}, has_metadata={has_metadata}")
+                if has_metadata and msg['metadata']:
+                    meta_keys = list(msg['metadata'].keys()) if isinstance(msg['metadata'], dict) else []
+                    logger.info(f"    Metadata keys: {meta_keys}")
+
             # Get timestamps
             blob.reload()  # Load metadata
             created_at = blob.time_created
             updated_at = blob.updated
+
+            # Get custom name from metadata
+            chat_name = blob.metadata.get("chat_name") if blob.metadata else None
 
             return {
                 "session_id": session_id,
@@ -127,6 +150,7 @@ class StorageService:
                 "message_count": len(messages),
                 "created_at": created_at.isoformat() if created_at else None,
                 "updated_at": updated_at.isoformat() if updated_at else None,
+                "name": chat_name
             }
 
         except Exception as e:
@@ -136,7 +160,7 @@ class StorageService:
     def list_chat_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
         List all chat sessions
-        Returns: [{session_id, created_at, message_count, preview}, ...]
+        Returns: [{session_id, created_at, message_count, preview, name}, ...]
         """
         if not self.bucket:
             return []
@@ -164,12 +188,17 @@ class StorageService:
                             break
 
                     blob.reload()
+
+                    # Get custom name from metadata
+                    chat_name = blob.metadata.get("chat_name") if blob.metadata else None
+
                     sessions.append({
                         "session_id": session_id,
                         "created_at": blob.time_created.isoformat() if blob.time_created else None,
                         "updated_at": blob.updated.isoformat() if blob.updated else None,
                         "message_count": len(messages),
-                        "preview": preview
+                        "preview": preview,
+                        "name": chat_name
                     })
 
                     if len(sessions) >= limit:
@@ -183,6 +212,33 @@ class StorageService:
         except Exception as e:
             logger.error(f"Error listing chat sessions: {e}")
             return []
+
+    def update_chat_name(self, session_id: str, name: str) -> bool:
+        """Update the custom name of a chat session"""
+        if not self.bucket:
+            return False
+
+        try:
+            blob_path = f"chat-history/{session_id}/messages.json"
+            blob = self.bucket.blob(blob_path)
+
+            if not blob.exists():
+                logger.warning(f"Chat session {session_id} not found")
+                return False
+
+            # Update metadata with custom name
+            blob.reload()  # Load current metadata
+            metadata = blob.metadata or {}
+            metadata["chat_name"] = name
+            blob.metadata = metadata
+            blob.patch()  # Update only metadata
+
+            logger.info(f"Updated chat session {session_id} name to '{name}'")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error updating chat name: {e}")
+            return False
 
     def delete_chat_session(self, session_id: str) -> bool:
         """Delete a chat session"""
