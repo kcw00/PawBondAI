@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 
 export const Layout = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const { showTrace, setShowTrace, searchType, currentQuery } = useSearch();
+  const { showTrace, setShowTrace, searchType, currentQuery, traceData } = useSearch();
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
@@ -40,17 +40,17 @@ export const Layout = () => {
           <ChatInterface />
         </div>
 
-        {/* AI Trace Button - Top Right */}
+        {/* AI Trace Button - Bottom Right */}
         <Button
           onClick={() => setShowTrace(true)}
-          className="fixed top-4 right-6 rounded-full shadow-lg h-10 px-4 gap-2 z-10"
+          className="fixed bottom-6 right-6 rounded-full shadow-lg h-10 px-4 gap-2 z-10"
           title="View AI Trace"
         >
           <Brain className="h-4 w-4" />
           <span className="text-sm font-medium">AI Trace</span>
-          {searchType && (
+          {traceData && (
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              1
+              {traceData.steps.length}
             </Badge>
           )}
         </Button>
@@ -59,8 +59,7 @@ export const Layout = () => {
         <AITraceDrawer
           open={showTrace}
           onOpenChange={setShowTrace}
-          searchType={searchType}
-          query={currentQuery}
+          traceData={traceData}
         />
       </div>
     </div>

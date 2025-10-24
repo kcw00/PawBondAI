@@ -10,6 +10,21 @@ interface ChatMessage {
   metadata?: any;
 }
 
+interface TraceStep {
+  id: string;
+  label: string;
+  status: 'complete' | 'processing' | 'pending';
+  duration?: number;
+  details?: string;
+  data?: any;
+}
+
+interface TraceData {
+  steps: TraceStep[];
+  total_duration_ms: number;
+  query: string;
+}
+
 interface SearchContextType {
   searchType: SearchType;
   setSearchType: (type: SearchType) => void;
@@ -21,6 +36,8 @@ interface SearchContextType {
   setLoadedSessionId: (sessionId: string | null) => void;
   loadedMessages: ChatMessage[];
   setLoadedMessages: (messages: ChatMessage[]) => void;
+  traceData: TraceData | null;
+  setTraceData: (trace: TraceData | null) => void;
 }
 
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
@@ -31,19 +48,22 @@ export const SearchProvider = ({ children }: { children: ReactNode }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
   const [loadedMessages, setLoadedMessages] = useState<ChatMessage[]>([]);
+  const [traceData, setTraceData] = useState<TraceData | null>(null);
 
   return (
-    <SearchContext.Provider value={{ 
-      searchType, 
-      setSearchType, 
-      currentQuery, 
+    <SearchContext.Provider value={{
+      searchType,
+      setSearchType,
+      currentQuery,
       setCurrentQuery,
       showTrace,
       setShowTrace,
       loadedSessionId,
       setLoadedSessionId,
       loadedMessages,
-      setLoadedMessages
+      setLoadedMessages,
+      traceData,
+      setTraceData
     }}>
       {children}
     </SearchContext.Provider>

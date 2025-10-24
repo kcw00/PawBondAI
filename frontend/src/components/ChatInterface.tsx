@@ -127,7 +127,7 @@ export const ChatInterface = () => {
   const [hasData, setHasData] = useState(true);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
-  const { setSearchType, setCurrentQuery, setShowTrace, loadedSessionId, loadedMessages, setLoadedSessionId } = useSearch();
+  const { setSearchType, setCurrentQuery, setShowTrace, loadedSessionId, loadedMessages, setLoadedSessionId, setTraceData } = useSearch();
 
   // API hooks
   const sendMessage = useSendMessage();
@@ -261,6 +261,12 @@ export const ChatInterface = () => {
         application_text: applicationText,
       });
 
+      // Store trace data if available
+      if (result.trace) {
+        setTraceData(result.trace);
+        setShowTrace(true);
+      }
+
       const analysisMessage: Message = {
         id: messages.length + 2,
         role: "assistant" as const,
@@ -377,10 +383,16 @@ export const ChatInterface = () => {
         setSessionId(result.session_id);
       }
 
+      // Store trace data if available
+      if (result.trace) {
+        setTraceData(result.trace);
+        setShowTrace(true);
+      }
+
       // Debug: Log the API response
       console.log("Full API result:", JSON.stringify(result, null, 2));
       console.log("Response.matches:", result.response?.matches);
-      
+
       // Format the response based on intent
       const formatted = formatApiResponse(result.response, result.intent);
       console.log("Formatted matches:", formatted.matches);
@@ -812,7 +824,7 @@ Demo mode - use Real API mode for live results`,
             <div className="max-w-md w-full border border-border rounded-lg p-8 text-center space-y-6"
               style={{ background: 'var(--gradient-welcome)' }}>
               <div className="text-4xl mb-2">👋</div>
-              <h2 className="text-2xl font-bold text-foreground">Welcome to RescueAI!</h2>
+              <h2 className="text-2xl font-bold text-foreground">Welcome to PawBondAI!</h2>
               <p className="text-muted-foreground">
                 To get started, you need to upload your rescue center's data.
               </p>
