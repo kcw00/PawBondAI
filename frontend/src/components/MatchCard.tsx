@@ -65,7 +65,7 @@ export const MatchCard = ({ match }: MatchCardProps) => {
 
       {/* Highlights */}
       <div className="space-y-2 mb-4">
-        {match.highlights.map((highlight, idx) => (
+        {match.highlights && Array.isArray(match.highlights) && match.highlights.map((highlight, idx) => (
           <div key={idx} className="flex items-start">
             <CheckCircle2 className="h-4 w-4 text-success mr-2 mt-0.5 flex-shrink-0" />
             <span className="text-sm text-foreground">{highlight}</span>

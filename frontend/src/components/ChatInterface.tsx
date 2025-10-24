@@ -127,16 +127,97 @@ export const ChatInterface = () => {
   const [hasData, setHasData] = useState(true);
   const [showApplicationInput, setShowApplicationInput] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null); // Track current session
-  const { setSearchType, setCurrentQuery, setShowTrace } = useSearch();
+  const { setSearchType, setCurrentQuery, setShowTrace, loadedSessionId, loadedMessages, setLoadedSessionId } = useSearch();
 
   // API hooks
   const sendMessage = useSendMessage();
   const analyzeApplication = useAnalyzeApplication();
   const createSession = useCreateSession();
 
+  // Load messages from loaded session
+  useEffect(() => {
+    if (loadedSessionId && loadedMessages.length > 0) {
+      console.log("Loading session:", loadedSessionId);
+      console.log("Raw loaded messages:", loadedMessages);
+
+      // Convert loaded messages to Message format
+      const convertedMessages: Message[] = loadedMessages.map((msg, index) => {
+        console.log(`Message ${index} metadata:`, msg.metadata);
+        console.log(`Message ${index} matches:`, msg.metadata?.matches);
+
+        // Build the message object with all potential fields
+        const convertedMessage: Message = {
+          id: index + 1,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+        };
+
+        // Add metadata fields if they exist
+        if (msg.metadata) {
+          if (msg.metadata.matches && Array.isArray(msg.metadata.matches)) {
+            // Transform raw Elasticsearch matches into the format MatchCard expects
+            const transformedMatches = msg.metadata.matches.map((hit: any) => {
+              const source = hit._source || hit.data || hit;
+              const score = hit._score || hit.score || 0;
+
+              return {
+                name: source.applicant_name || source.name || "Unknown Applicant",
+                location: source.location || `${source.city || ''}, ${source.state || ''}`.trim() || "Not specified",
+                housing: source.housing_type || "Not specified",
+                score: Math.round(score >= 1 ? score * 10 : score * 100),
+                highlights: source.highlights || source.key_strengths || [
+                  source.motivation ? `${source.motivation.substring(0, 120)}...` : null,
+                  source.experience_level ? `Experience: ${source.experience_level}` : null,
+                  source.employment_status ? `Employment: ${source.employment_status}` : null,
+                ].filter(Boolean),
+                explanation: {
+                  semantic: score,
+                  reason: `Match score: ${score.toFixed(3)}`,
+                  structured: source.housing_type || source.employment_status ?
+                    `Housing: ${source.housing_type || 'N/A'}, Work: ${source.employment_status || 'N/A'}` :
+                    "",
+                  experience: source.experience_level || source.previous_dog ?
+                    `${source.experience_level || 'Unknown'} ${source.previous_dog ? '(has dog experience)' : ''}` :
+                    "No experience info",
+                },
+              };
+            });
+
+            convertedMessage.matches = transformedMatches;
+            console.log(`✓ Added ${transformedMatches.length} transformed matches to message ${index}`);
+          }
+          if (msg.metadata.photoAnalysis) {
+            convertedMessage.photoAnalysis = msg.metadata.photoAnalysis;
+          }
+          if (msg.metadata.medicalDocument) {
+            convertedMessage.medicalDocument = msg.metadata.medicalDocument;
+          }
+          if (msg.metadata.successCases) {
+            convertedMessage.successCases = msg.metadata.successCases;
+          }
+          if (msg.metadata.applicationAnalysis) {
+            convertedMessage.applicationAnalysis = msg.metadata.applicationAnalysis;
+          }
+          if (msg.metadata.behavioralAnalysis) {
+            convertedMessage.behavioralAnalysis = msg.metadata.behavioralAnalysis;
+          }
+        }
+
+        return convertedMessage;
+      });
+
+      console.log("Converted messages:", convertedMessages);
+      setMessages(convertedMessages);
+      setSessionId(loadedSessionId);
+      // Clear the loaded session from context
+      setLoadedSessionId(null);
+    }
+  }, [loadedSessionId, loadedMessages]);
+
   // Create new session on mount
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId && !loadedSessionId) {
       createSession.mutateAsync().then((result) => {
         setSessionId(result.session_id);
         console.log("Created new session:", result.session_id);
@@ -296,8 +377,13 @@ export const ChatInterface = () => {
         setSessionId(result.session_id);
       }
 
+      // Debug: Log the API response
+      console.log("Full API result:", JSON.stringify(result, null, 2));
+      console.log("Response.matches:", result.response?.matches);
+      
       // Format the response based on intent
       const formatted = formatApiResponse(result.response, result.intent);
+      console.log("Formatted matches:", formatted.matches);
 
       const aiMessage: Message = {
         id: messages.length + 2,

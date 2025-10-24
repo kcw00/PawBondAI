@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ interface ChatMessage {
 
 export default function ChatHistoryPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -45,6 +46,12 @@ export default function ChatHistoryPage() {
 
   useEffect(() => {
     fetchSessions();
+    
+    // Check if there's a session parameter in the URL
+    const sessionParam = searchParams.get('session');
+    if (sessionParam) {
+      fetchSessionMessages(sessionParam);
+    }
   }, []);
 
   const fetchSessions = async () => {

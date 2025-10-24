@@ -3,6 +3,8 @@ import { Plus, PawPrint, FileText, Heart, BarChart3, PanelLeftClose, MessageSqua
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api";
+import { useSearch } from "@/contexts/SearchContext";
+import { toast } from "sonner";
 
 interface LeftSidebarProps {
   onCollapse: () => void;
@@ -18,6 +20,7 @@ interface ChatSession {
 
 export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
   const navigate = useNavigate();
+  const { setLoadedSessionId, setLoadedMessages } = useSearch();
   const [recentChats, setRecentChats] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -51,6 +54,18 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
       if (showLoading) {
         setLoading(false);
       }
+    }
+  };
+
+  const handleLoadSession = async (sessionId: string) => {
+    try {
+      const response = await api.chatHistory.getSession(sessionId);
+      setLoadedMessages(response.messages || []);
+      setLoadedSessionId(sessionId);
+      toast.success("Conversation loaded");
+    } catch (error) {
+      console.error("Error loading session:", error);
+      toast.error("Failed to load conversation");
     }
   };
 
@@ -94,6 +109,11 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
       <Button
         className="w-full mb-3 bg-button hover:bg-button/90 text-button-foreground"
         size="lg"
+        onClick={() => {
+          setLoadedSessionId(null);
+          setLoadedMessages([]);
+          window.location.reload();
+        }}
       >
         <Plus className="h-5 w-5 mr-2" />
         New Conversation
@@ -145,10 +165,7 @@ export const LeftSidebar = ({ onCollapse }: LeftSidebarProps) => {
               <button
                 key={chat.session_id}
                 className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group"
-                onClick={() => {
-                  // TODO: Load this conversation in the chat interface
-                  console.log('Load session:', chat.session_id);
-                }}
+                onClick={() => handleLoadSession(chat.session_id)}
               >
                 <p className="text-sm text-foreground truncate mb-1">
                   {chat.preview || 'Conversation'}
