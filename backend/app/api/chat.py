@@ -38,6 +38,59 @@ async def handle_chat_message(request: ChatRequest):
             session_id=session_id, role="user", content=request.message, metadata=request.context
         )
 
+        # FIRST: Check if this is a follow-up query about a specific applicant (before intent detection)
+        message_lower = request.message.lower()
+        applicants_data = request.context.get("applicants_data", []) if request.context else []
+
+        logger.info(f"📋 Context has {len(applicants_data)} applicants stored")
+
+        is_applicant_query = (
+            applicants_data and
+            any(keyword in message_lower for keyword in [
+                "details", "tell me", "about", "more", "show me",
+                "give me", "what", "who", "information"
+            ])
+        )
+
+        logger.info(f"🔍 Is applicant query: {is_applicant_query}")
+
+        if is_applicant_query:
+            # Extract applicant name from the message
+            found_applicant = None
+            logger.info(f"🔎 Searching for applicant in message: {request.message}")
+            for applicant in applicants_data:
+                applicant_name = applicant.get("applicant_name", "")
+                # Check if any part of the name is in the message
+                name_parts = applicant_name.lower().split()
+                if any(part in message_lower for part in name_parts if len(part) > 2):
+                    found_applicant = applicant
+                    logger.info(f"✅ Found applicant: {applicant_name}")
+                    break
+
+            if found_applicant:
+                # Generate detailed response about the specific applicant
+                response = await vertex_gemini_service.generate_applicant_details(
+                    query=request.message,
+                    applicant_data=found_applicant
+                )
+
+                # Save AI response to GCS
+                storage_service.save_chat_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=response,
+                    intent="applicant_details"
+                )
+
+                return {
+                    "success": True,
+                    "intent": "applicant_details",
+                    "session_id": session_id,
+                    "response": {"text": response, "applicant": found_applicant}
+                }
+            else:
+                logger.warning(f"❌ No applicant found matching the query: {request.message}")
+
         # Detect intent using Vertex Gemini
         intent_start = time.time()
         intent = await vertex_gemini_service.detect_intent(request.message)
@@ -189,52 +242,8 @@ async def handle_chat_message(request: ChatRequest):
             }
 
         else:
-            # Check if this is a follow-up query about a specific applicant
-            message_lower = request.message.lower()
-            applicants_data = request.context.get("applicants_data", []) if request.context else []
-
-            is_applicant_query = (
-                applicants_data and
-                any(keyword in message_lower for keyword in [
-                    "details", "tell me", "about", "application", "more", "show me",
-                    "give me", "what", "who", "information"
-                ])
-            )
-
-            if is_applicant_query:
-                # Extract applicant name from the message
-                found_applicant = None
-                for applicant in applicants_data:
-                    applicant_name = applicant.get("applicant_name", "")
-                    # Check if any part of the name is in the message
-                    name_parts = applicant_name.lower().split()
-                    if any(part in message_lower for part in name_parts if len(part) > 2):
-                        found_applicant = applicant
-                        break
-
-                if found_applicant:
-                    # Generate detailed response about the specific applicant
-                    response = await vertex_gemini_service.generate_applicant_details(
-                        query=request.message,
-                        applicant_data=found_applicant
-                    )
-
-                    # Save AI response to GCS
-                    storage_service.save_chat_message(
-                        session_id=session_id,
-                        role="assistant",
-                        content=response,
-                        intent="applicant_details"
-                    )
-
-                    return {
-                        "success": True,
-                        "intent": "applicant_details",
-                        "session_id": session_id,
-                        "response": {"text": response, "applicant": found_applicant}
-                    }
-
             # Check if this is a dog info query or similar cases query
+            message_lower = request.message.lower()
             is_dog_query = any(
                 keyword in message_lower
                 for keyword in [

@@ -27,26 +27,26 @@ interface DogMatch {
 }
 
 interface ApplicationAnalysisProps {
-  applicantName: string;
-  strengths: string[];
-  experienceLevel: string;
-  bestSuitedFor: string[];
-  similarAdopters: SimilarAdopter[];
-  successRate: number;
-  successFactors: Record<string, number>;
-  recommendedDogs: DogMatch[];
+  applicantName?: string;
+  strengths?: string[];
+  experienceLevel?: string;
+  bestSuitedFor?: string[];
+  similarAdopters?: SimilarAdopter[];
+  successRate?: number;
+  successFactors?: Record<string, number>;
+  recommendedDogs?: DogMatch[];
   onViewQuery?: () => void;
 }
 
 export const ApplicationAnalysis = ({
-  applicantName,
-  strengths,
-  experienceLevel,
-  bestSuitedFor,
-  similarAdopters,
-  successRate,
-  successFactors,
-  recommendedDogs,
+  applicantName = "Unknown",
+  strengths = [],
+  experienceLevel = "Not specified",
+  bestSuitedFor = [],
+  similarAdopters = [],
+  successRate = 0,
+  successFactors = {},
+  recommendedDogs = [],
   onViewQuery,
 }: ApplicationAnalysisProps) => {
   return (
@@ -59,47 +59,52 @@ export const ApplicationAnalysis = ({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <p className="text-sm font-semibold text-foreground mb-2">Key Strengths:</p>
-            <div className="space-y-2">
-              {strengths.map((strength, idx) => (
-                <div key={idx} className="flex items-start">
-                  <CheckCircle2 className="h-4 w-4 text-[#6a994e] mr-2 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-foreground">{strength}</p>
-                </div>
-              ))}
+          {strengths && strengths.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-foreground mb-2">Key Strengths:</p>
+              <div className="space-y-2">
+                {strengths.map((strength, idx) => (
+                  <div key={idx} className="flex items-start">
+                    <CheckCircle2 className="h-4 w-4 text-[#6a994e] mr-2 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-foreground">{strength}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex gap-4 pt-2">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Experience Level</p>
               <Badge className="bg-[#718355] text-white">{experienceLevel}</Badge>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Best suited for</p>
-              <div className="flex gap-1 flex-wrap">
-                {bestSuitedFor.map((trait, idx) => (
-                  <Badge key={idx} variant="outline" className="border-[#718355] text-[#718355]">
-                    {trait}
-                  </Badge>
-                ))}
+            {bestSuitedFor && bestSuitedFor.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Best suited for</p>
+                <div className="flex gap-1 flex-wrap">
+                  {bestSuitedFor.map((trait, idx) => (
+                    <Badge key={idx} variant="outline" className="border-[#718355] text-[#718355]">
+                      {trait}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </Card>
 
       {/* Similar Past Adopters */}
-      <div>
-        <div className="flex items-center mb-3">
-          <TrendingUp className="h-5 w-5 text-[#718355] mr-2" />
-          <h3 className="text-xl font-bold text-foreground">Similar Past Adopters</h3>
-          <Badge className="ml-2 bg-[#CFE1B9] text-[#718355]">Elasticsearch vector search</Badge>
-        </div>
+      {similarAdopters && similarAdopters.length > 0 && (
+        <div>
+          <div className="flex items-center mb-3">
+            <TrendingUp className="h-5 w-5 text-[#718355] mr-2" />
+            <h3 className="text-xl font-bold text-foreground">Similar Past Adopters</h3>
+            <Badge className="ml-2 bg-[#CFE1B9] text-[#718355]">Elasticsearch vector search</Badge>
+          </div>
 
-        <div className="space-y-4">
-          {similarAdopters.map((adopter, idx) => (
+          <div className="space-y-4">
+            {similarAdopters.map((adopter, idx) => (
             <Card key={idx} className="p-5 bg-white border-gray-200 hover:shadow-lg transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div>
@@ -148,6 +153,7 @@ export const ApplicationAnalysis = ({
           ))}
         </div>
       </div>
+      )}
 
       {/* Pattern Analysis */}
       <Card className="p-6 bg-white border-gray-200">
@@ -174,25 +180,27 @@ export const ApplicationAnalysis = ({
             </div>
           </div>
 
-          <div>
-            <p className="text-sm font-semibold text-foreground mb-2">Success Factors:</p>
-            <div className="space-y-2">
-              {Object.entries(successFactors).map(([factor, percentage]) => (
-                <div key={factor}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-foreground">{factor}</span>
-                    <span className="font-medium text-[#718355]">{percentage}%</span>
+          {successFactors && Object.keys(successFactors).length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-foreground mb-2">Success Factors:</p>
+              <div className="space-y-2">
+                {Object.entries(successFactors).map(([factor, percentage]) => (
+                  <div key={factor}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-foreground">{factor}</span>
+                      <span className="font-medium text-[#718355]">{percentage}%</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#718355]"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-[#718355]" 
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="bg-[#CFE1B9]/20 p-3 rounded">
             <p className="text-sm font-semibold text-foreground mb-1">Risk Factors:</p>
@@ -205,14 +213,15 @@ export const ApplicationAnalysis = ({
       </Card>
 
       {/* Recommended Dogs */}
-      <div>
-        <div className="flex items-center mb-3">
-          <Heart className="h-5 w-5 text-[#f4a261] mr-2" />
-          <h3 className="text-xl font-bold text-foreground">Recommended Dogs for {applicantName}</h3>
-        </div>
+      {recommendedDogs && recommendedDogs.length > 0 && (
+        <div>
+          <div className="flex items-center mb-3">
+            <Heart className="h-5 w-5 text-[#f4a261] mr-2" />
+            <h3 className="text-xl font-bold text-foreground">Recommended Dogs for {applicantName}</h3>
+          </div>
 
-        <div className="grid gap-4">
-          {recommendedDogs.map((dog) => (
+          <div className="grid gap-4">
+            {recommendedDogs.map((dog) => (
             <Card key={dog.id} className="p-5 bg-white border-gray-200 hover:shadow-lg transition-all hover:scale-[1.01]">
               <div className="flex items-start justify-between mb-3">
                 <div>
@@ -252,16 +261,11 @@ export const ApplicationAnalysis = ({
           ))}
         </div>
       </div>
+      )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3 pt-4">
-        <Button variant="outline" className="flex-1 border-[#718355] text-[#718355] hover:bg-[#718355] hover:text-white">
-          Compare with Other Applicants
-        </Button>
-        <Button className="flex-1 bg-[#f4a261] hover:bg-[#f4a261]/90 text-white">
-          Draft Introduction Email
-        </Button>
-        {onViewQuery && (
+      {onViewQuery && (
+        <div className="flex gap-3 pt-4">
           <Button 
             variant="outline" 
             onClick={onViewQuery}
@@ -269,8 +273,8 @@ export const ApplicationAnalysis = ({
           >
             View Query Details
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
