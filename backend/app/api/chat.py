@@ -53,13 +53,20 @@ async def handle_chat_message(request: ChatRequest):
                 search_type="adopters"
             )
 
-            # Save AI response to GCS
+            # Save AI response to GCS with full matches data
+            matches_data = search_results.get("hits", [])
+            logger.info(f"Saving {len(matches_data)} matches to session {session_id}")
+            logger.info(f"First match sample: {matches_data[0] if matches_data else 'None'}")
+            
             storage_service.save_chat_message(
                 session_id=session_id,
                 role="assistant",
                 content=formatted_text,
                 intent=intent["type"],
-                metadata={"total_matches": len(search_results.get("hits", []))}
+                metadata={
+                    "total_matches": len(matches_data),
+                    "matches": matches_data  # Save the actual match data
+                }
             )
 
             return {
@@ -78,13 +85,15 @@ async def handle_chat_message(request: ChatRequest):
             # Use matching service for application analysis
             result = await matching_service.analyze_application(request.message)
 
-            # Save AI response to GCS
+            # Save AI response to GCS with full analysis data
             storage_service.save_chat_message(
                 session_id=session_id,
                 role="assistant",
                 content="Application analysis completed",
                 intent=intent["type"],
-                metadata=result
+                metadata={
+                    "applicationAnalysis": result  # Save full analysis for display in history
+                }
             )
 
             return {"success": True, "intent": intent["type"], "session_id": session_id, "response": result}
