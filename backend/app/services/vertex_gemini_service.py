@@ -546,6 +546,69 @@ Format:
             logger.error(f"Error generating response: {e}")
             return "I apologize, I'm having trouble processing your request right now."
 
+    async def generate_applicant_details(
+        self,
+        query: str,
+        applicant_data: Dict[str, Any]
+    ) -> str:
+        """
+        Generate detailed information about a specific applicant based on their full data.
+
+        Args:
+            query: User's question about the applicant
+            applicant_data: Full applicant data from Elasticsearch
+
+        Returns:
+            Natural language response with applicant details
+        """
+        prompt = f"""You are a helpful rescue coordinator AI assistant. The user is asking about a specific applicant.
+
+User question: "{query}"
+
+Applicant data from our database:
+{json.dumps(applicant_data, indent=2)}
+
+Provide a comprehensive, well-formatted response that answers the user's question using the data provided.
+
+RULES:
+- Use markdown formatting for better readability (headers, lists, bold, etc.)
+- Structure your response with clear sections
+- Include relevant details from all fields in the data
+- If the user asks for specific information, focus on that but also provide context
+- Be warm, professional, and thorough
+- Highlight key strengths and important details about their application
+- If they have experience with dogs, living situation, or other relevant info, include it
+- Format addresses, phone numbers, and emails nicely
+
+Write a comprehensive response that would help a rescue coordinator understand this applicant."""
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+            )
+            result = (response.text or "").strip()
+            logger.info(f"Generated applicant details for query: {query}")
+            return result
+        except Exception as e:
+            logger.error(f"Error generating applicant details: {e}")
+            # Fallback: create a simple formatted response
+            name = applicant_data.get("applicant_name", "Unknown")
+            location = f"{applicant_data.get('city', '')}, {applicant_data.get('state', '')}".strip(", ")
+            housing = applicant_data.get("housing_type", "Not specified")
+            experience = applicant_data.get("experience_level", "Not specified")
+            motivation = applicant_data.get("motivation", "Not provided")[:300]
+
+            return f"""## {name}
+
+**Location:** {location}
+**Housing:** {housing}
+**Experience Level:** {experience}
+
+**Motivation:** {motivation}...
+
+*Note: This is basic information. For more details, please review the full application.*"""
+
     async def detect_intent(self, message: str) -> Dict[str, Any]:
         try:
             prompt = f"""Analyze this user message and determine the intent and extract any structured filters.
