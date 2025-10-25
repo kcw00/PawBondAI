@@ -62,12 +62,14 @@ interface SuccessCase {
 }
 
 interface ApplicationAnalysis {
-  applicant_name: string;
-  score: number;
-  strengths: string[];
-  concerns: string[];
-  recommendation: string;
-  similar_adopters: any[];
+  applicantName?: string;
+  strengths?: string[];
+  experienceLevel?: string;
+  bestSuitedFor?: string[];
+  successRate?: number;
+  successFactors?: Record<string, number>;
+  recommendedDogs?: any[];
+  similarAdopters?: any[];
 }
 
 interface BehavioralAnalysis {
@@ -141,6 +143,9 @@ export const ChatInterface = () => {
       console.log("Loading session:", loadedSessionId);
       console.log("Raw loaded messages:", loadedMessages);
 
+      // Track if we found applicant data to restore
+      let restoredApplicantsData: any[] = [];
+
       // Convert loaded messages to Message format
       const convertedMessages: Message[] = loadedMessages.map((msg, index) => {
         console.log(`Message ${index} metadata:`, msg.metadata);
@@ -157,6 +162,12 @@ export const ChatInterface = () => {
         // Add metadata fields if they exist
         if (msg.metadata) {
           if (msg.metadata.matches && Array.isArray(msg.metadata.matches)) {
+            // Store the raw matches data for follow-up queries
+            const rawMatches = msg.metadata.matches.map((hit: any) => hit._source || hit.data || hit);
+            if (rawMatches.length > 0) {
+              restoredApplicantsData = rawMatches; // Keep the most recent matches
+            }
+
             // Transform raw Elasticsearch matches into the format MatchCard expects
             const transformedMatches = msg.metadata.matches.map((hit: any) => {
               const source = hit._source || hit.data || hit;
@@ -211,6 +222,13 @@ export const ChatInterface = () => {
       console.log("Converted messages:", convertedMessages);
       setMessages(convertedMessages);
       setSessionId(loadedSessionId);
+
+      // Restore applicants data if we found any
+      if (restoredApplicantsData.length > 0) {
+        setApplicantsData(restoredApplicantsData);
+        console.log(`✅ Restored ${restoredApplicantsData.length} applicants from session history`);
+      }
+
       // Clear the loaded session from context
       setLoadedSessionId(null);
     }
@@ -268,12 +286,42 @@ export const ChatInterface = () => {
         setShowTrace(true);
       }
 
+      // Transform the backend response to match ApplicationAnalysis component format
+      const backendAnalysis = result.analysis as any; // Backend returns different structure
+      const transformedAnalysis = backendAnalysis ? {
+        applicantName: "Applicant", // We don't have applicant name from free text
+        strengths: [], // Will be populated from patterns if available
+        experienceLevel: "Not specified",
+        bestSuitedFor: [],
+        successRate: backendAnalysis.prediction?.confidence || 0,
+        successFactors: {}, // Will be populated from patterns if available
+        recommendedDogs: (backendAnalysis.recommended_dogs || []).map((dog: any) => ({
+          id: dog._id || dog.id || "unknown",
+          name: dog._source?.name || dog.data?.name || "Unknown Dog",
+          breed: dog._source?.breed || dog.data?.breed || "Mixed",
+          age: dog._source?.age || dog.data?.age || 0,
+          matchScore: Math.round((dog._score || dog.score || 0.5) * 100),
+          reasons: [],
+        })),
+        similarAdopters: (backendAnalysis.similar_successful_adopters || []).map((adopter: any) => ({
+          name: adopter._source?.applicant_name || adopter.data?.applicant_name || "Unknown",
+          similarity: Math.round((adopter._score || adopter.score || 0.5) * 100),
+          dogName: adopter._source?.dog_name || adopter.data?.dog_name || "Unknown",
+          dogAge: adopter._source?.dog_age || adopter.data?.dog_age || 0,
+          adoptionDate: adopter._source?.adoption_date || adopter.data?.adoption_date || "Unknown",
+          outcome: "successful" as const,
+          traits: [],
+          followUp: [],
+          successFactors: [adopter._source?.success_factors || adopter.data?.success_factors || ""].filter(Boolean),
+        })),
+      } : null;
+
       const analysisMessage: Message = {
         id: messages.length + 2,
         role: "assistant" as const,
         content: "📊 Application Analysis Complete",
         timestamp: new Date(),
-        applicationAnalysis: result.analysis,
+        applicationAnalysis: transformedAnalysis,
       };
       setMessages((prev) => [...prev, analysisMessage]);
     } catch (error) {
@@ -374,6 +422,11 @@ export const ChatInterface = () => {
     setIsLoading(true);
 
     try {
+      console.log("📤 Sending message with context:", {
+        has_session: !!sessionId,
+        applicants_count: applicantsData.length
+      });
+
       const result = await sendMessage.mutateAsync({
         message: message,
         context: {
@@ -405,7 +458,8 @@ export const ChatInterface = () => {
       if (result.response?.matches && Array.isArray(result.response.matches)) {
         const fullApplicantsData = result.response.matches.map((hit: any) => hit._source || hit.data || hit);
         setApplicantsData(fullApplicantsData);
-        console.log("Stored applicants data:", fullApplicantsData);
+        console.log("✅ Stored", fullApplicantsData.length, "applicants for follow-up queries");
+        console.log("Sample applicant names:", fullApplicantsData.slice(0, 3).map((a: any) => a.applicant_name));
       }
 
       const aiMessage: Message = {
@@ -910,6 +964,16 @@ Demo mode - use Real API mode for live results`,
                     {message.matches.map((match, idx) => (
                       <MatchCard key={idx} match={match} />
                     ))}
+                    {message.matches.length > 0 && applicantsData.length > 0 && (
+                      <div className="mt-4 p-4 bg-secondary/10 rounded-lg border border-secondary/30">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          💡 Want to learn more? Ask me about any specific applicant by name!
+                        </p>
+                        <div className="text-xs text-muted-foreground">
+                          Example: "Tell me more about {message.matches[0]?.name}"
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
