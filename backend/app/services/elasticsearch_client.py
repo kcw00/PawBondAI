@@ -1,4 +1,4 @@
-from elasticsearch.dsl import async_connections
+from elasticsearch import AsyncElasticsearch
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 
@@ -10,13 +10,13 @@ class AsyncElasticsearchClient:
     def __init__(self):
         # Create async client
         if settings.elastic_cloud_id:
-            self.client = async_connections.create_connection(
+            self.client = AsyncElasticsearch(
                 cloud_id=settings.elastic_cloud_id,
                 api_key=settings.elastic_api_key,
                 request_timeout=30,
             )
         else:
-            self.client = async_connections.create_connection(
+            self.client = AsyncElasticsearch(
                 hosts=[settings.elastic_endpoint],
                 api_key=settings.elastic_api_key,
                 request_timeout=30,
@@ -77,5 +77,21 @@ class AsyncElasticsearchClient:
         return await self.client.delete(index=index_name, id=id)
 
 
-# Create singleton instance
-es_client = AsyncElasticsearchClient()
+# Lazy-loaded singleton instance
+_es_client = None
+
+def get_es_client() -> AsyncElasticsearchClient:
+    """Get or create the Elasticsearch client singleton."""
+    global _es_client
+    if _es_client is None:
+        _es_client = AsyncElasticsearchClient()
+    return _es_client
+
+# For backward compatibility, maintain the existing import pattern
+# but defer initialization until first use
+class _ESClientProxy:
+    """Proxy that defers Elasticsearch client initialization until first use."""
+    def __getattr__(self, name):
+        return getattr(get_es_client(), name)
+
+es_client = _ESClientProxy()

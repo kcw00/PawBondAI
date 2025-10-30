@@ -229,5 +229,21 @@ class BigQueryService:
             return "Uncertain - Consider trial foster period (ML confidence: low)"
 
 
-# Singleton instance
-bigquery_service = BigQueryService()
+# Lazy-loaded singleton instance
+_bigquery_service = None
+
+def get_bigquery_service() -> BigQueryService:
+    """Get or create the BigQuery service singleton."""
+    global _bigquery_service
+    if _bigquery_service is None:
+        _bigquery_service = BigQueryService()
+    return _bigquery_service
+
+# For backward compatibility, maintain the existing import pattern
+# but defer initialization until first use
+class _BigQueryServiceProxy:
+    """Proxy that defers BigQuery service initialization until first use."""
+    def __getattr__(self, name):
+        return getattr(get_bigquery_service(), name)
+
+bigquery_service = _BigQueryServiceProxy()

@@ -8,16 +8,16 @@ es_client = get_elasticsearch_client()
 
 
 @router.get("/health")
-async def health_check():
+def health_check():
     try:
-        health = await es_client.cluster.health()
+        # Use info() instead of cluster.health() for Elasticsearch Serverless compatibility
+        info = es_client.info()
 
         return {
             "status": "success",
             "message": "Connected to Elasticsearch",
-            "cluster_status": health["status"],
-            "number_of_nodes": health["number_of_nodes"],
-            "active_shards": health["active_shards"],
+            "elasticsearch_version": info.get("version", {}).get("number", "unknown"),
+            "cluster_name": info.get("cluster_name", "unknown"),
         }
     except Exception as e:
         status_code = getattr(e, "status_code", 500)

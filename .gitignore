@@ -54,3 +54,6 @@ credentials/
 *.json
 # Ignore converted json files
 convert_json.py
+
+# Local Netlify folder
+.netlify

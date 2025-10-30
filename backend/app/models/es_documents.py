@@ -8,10 +8,6 @@ from elasticsearch.dsl import (
     Float,
     Integer,
     Boolean,
-    Nested,
-    InnerDoc,
-    Object,
-    GeoPoint,
 )
 from app.core.config import get_settings
 
@@ -252,37 +248,39 @@ class MedicalDocument(AsyncDocument):
 
     # Basic document info
     title = Text(fields={"raw": Keyword()})
-    document_type = Keyword()  # "vet_record", "prescription", "lab_result", "vaccination", "surgery_report", "other"
+    document_type = (
+        Keyword()
+    )  # "vet_record", "prescription", "lab_result", "vaccination", "surgery_report", "other"
     content = Text(analyzer="standard")  # Extracted text from document
-    
+
     # Animal association
     dog_id = Keyword()  # Associated dog
     dog_name = Text(fields={"keyword": Keyword()})
-    
+
     # Medical details
     diagnosis = Text()
     treatment = Text()
     medications = Keyword(multi=True)
     procedures = Keyword(multi=True)
-    
+
     # Provider info
     veterinarian_name = Text()
     clinic_name = Text()
     clinic_location = Text()
-    
+
     # Dates
     document_date = Date()  # Date of the medical event/visit
     upload_date = Date()
-    
+
     # File metadata
     filename = Keyword()
     file_type = Keyword()  # "pdf", "image", "docx", etc.
     file_size = Integer()  # in bytes
-    
+
     # Classification
     severity = Keyword()  # "routine", "moderate", "severe", "emergency"
     category = Keyword()  # "preventive", "diagnostic", "treatment", "follow_up"
-    
+
     # Metadata
     tags = Keyword(multi=True)
     notes = Text()
