@@ -29,11 +29,6 @@ class Settings(BaseSettings):
     doc_ai_processor_id: str
     gemini_model: str
 
-    # Service account credentials
-    DOCUMENT_PROCESSOR_SA_KEY: str = "keys/document-processor-sa-key.json"
-    ANALYTICS_ML_SA_KEY: str = "keys/analytics-ml-sa-key.json"
-    LANGUAGE_SERVICES_SA_KEY: str = "keys/language-services-sa-key.json"
-
     # Index names
     dogs_index: str = "dogs"
     vet_knowledge_index: str = "veterinary_knowledge"

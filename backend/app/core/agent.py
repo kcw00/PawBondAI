@@ -12,36 +12,35 @@ TOOL_DECLARATIONS = [
     types.FunctionDeclaration(
         name="get_dog_profile",
         description="Retrieve complete dog profile including medical history, behavioral notes, and adoption status. Use when user asks about a specific dog by name or ID.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "dog_id": {
-                    "type": "string",
-                    "description": "Unique dog identifier (e.g., 'dog_001', 'luna_001')",
-                }
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "dog_id": types.Schema(
+                    type=types.Type.STRING,
+                    description="Unique dog identifier (e.g., 'dog_001', 'luna_001')",
+                )
             },
-            "required": ["dog_id"],
-        },
+            required=["dog_id"],
+        ),
     ),
     types.FunctionDeclaration(
         name="search_similar_cases",
         description="Find similar medical cases or adoption outcomes from the rescue database. Use to learn from past experiences and identify success patterns.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "symptoms": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of medical symptoms, behavioral traits, or conditions to match (e.g., ['heartworm', 'anxious', 'malnutrition'])",
-                },
-                "species": {
-                    "type": "string",
-                    "description": "Animal species",
-                    "default": "dog",
-                },
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "symptoms": types.Schema(
+                    type=types.Type.ARRAY,
+                    items=types.Schema(type=types.Type.STRING),
+                    description="List of medical symptoms, behavioral traits, or conditions to match (e.g., ['heartworm', 'anxious', 'malnutrition'])",
+                ),
+                "species": types.Schema(
+                    type=types.Type.STRING,
+                    description="Animal species",
+                ),
             },
-            "required": ["symptoms"],
-        },
+            required=["symptoms"],
+        ),
     ),
 ]
 
@@ -140,4 +139,20 @@ class PawBondAIAgent:
         return {"response": final_response, "session_id": session_id}
 
 
-agent = PawBondAIAgent()
+# Lazy-loaded singleton instance
+_agent = None
+
+def get_agent() -> PawBondAIAgent:
+    """Get or create the PawBondAI agent singleton."""
+    global _agent
+    if _agent is None:
+        _agent = PawBondAIAgent()
+    return _agent
+
+# For backward compatibility
+class _AgentProxy:
+    """Proxy that defers agent initialization until first use."""
+    def __getattr__(self, name):
+        return getattr(get_agent(), name)
+
+agent = _AgentProxy()
