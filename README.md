@@ -599,8 +599,3 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/PawBondAI/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/PawBondAI/discussions)
-- **Email**: support@pawbondai.com
-
----
-
-**Made with ❤️ for rescue dogs and the people who save them**
