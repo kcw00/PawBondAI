@@ -10,6 +10,7 @@ import { EmbeddingPreviewModal } from "@/components/data-management/EmbeddingPre
 import { ViewDataModal } from "@/components/data-management/ViewDataModal";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/services/api";
 
 interface RecentUpload {
   filename: string;
@@ -53,7 +54,7 @@ export default function DataManagementPage() {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/analytics/index-stats');
+        const response = await fetch(`${API_BASE_URL}/analytics/index-stats`);
         if (response.ok) {
           const data = await response.json();
           setIndexedCounts({
@@ -97,7 +98,7 @@ export default function DataManagementPage() {
 
       setUploadProgress(prev => prev ? { ...prev, stage: 'parsing' } : null);
 
-      const response = await fetch(`http://localhost:8000${uploadEndpoint}`, {
+      const response = await fetch(`${API_BASE_URL.replace('/api/v1', '')}${uploadEndpoint}`, {
         method: 'POST',
         body: formData,
       });
@@ -215,13 +216,13 @@ export default function DataManagementPage() {
     try {
       let endpoint = '';
       if (type === 'applications') {
-        endpoint = 'http://localhost:8000/api/v1/applications?limit=10';
+        endpoint = `${API_BASE_URL}/applications?limit=10`;
       } else if (type === 'dogs') {
-        endpoint = 'http://localhost:8000/api/v1/dogs?limit=10';
+        endpoint = `${API_BASE_URL}/dogs?limit=10`;
       } else if (type === 'medical') {
-        endpoint = 'http://localhost:8000/api/v1/medical-documents?limit=10';
+        endpoint = `${API_BASE_URL}/medical-documents?limit=10`;
       } else {
-        endpoint = 'http://localhost:8000/api/v1/outcomes?limit=10';
+        endpoint = `${API_BASE_URL}/outcomes?limit=10`;
       }
 
       console.log(`Fetching ${type} from:`, endpoint);

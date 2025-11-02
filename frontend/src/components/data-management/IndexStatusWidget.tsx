@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/services/api";
 
 interface IndexStats {
   total_documents: number;
@@ -31,7 +32,7 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/analytics/index-stats');
+      const response = await fetch(`${API_BASE_URL}/analytics/index-stats`);
       if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
       setStats(data);

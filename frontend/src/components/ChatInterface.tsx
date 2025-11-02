@@ -334,7 +334,7 @@ export const ChatInterface = () => {
       const errorMsg: Message = {
         id: messages.length + 2,
         role: "assistant" as const,
-        content: `❌ Error: ${errorMessage}\n\nTip: Make sure the backend is running at http://localhost:8000`,
+        content: `❌ Error: ${errorMessage}\n\nTip: Make sure the backend is running and accessible.`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -485,7 +485,7 @@ export const ChatInterface = () => {
       const errorMsg: Message = {
         id: messages.length + 2,
         role: "assistant" as const,
-        content: `❌ Error: ${errorMessage}\n\nTip: Make sure the backend is running at http://localhost:8000`,
+        content: `❌ Error: ${errorMessage}\n\nTip: Make sure the backend is running and accessible.`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
