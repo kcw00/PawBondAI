@@ -12,6 +12,7 @@ interface IndexStats {
   applications_count: number;
   dogs_count: number;
   outcomes_count: number;
+  medical_documents_count: number;
   recent_activity: Array<{
     type: string;
     count: number;
@@ -114,8 +115,12 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
                       <span className="font-semibold text-foreground">{stats?.dogs_count || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">└─ Outcomes:</span>
+                      <span className="text-muted-foreground">├─ Outcomes:</span>
                       <span className="font-semibold text-foreground">{stats?.outcomes_count || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">└─ Medical Docs:</span>
+                      <span className="font-semibold text-foreground">{stats?.medical_documents_count || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -127,7 +132,7 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total embeddings:</span>
-                    <span className="font-medium text-foreground">{stats?.applications_count || 0}</span>
+                    <span className="font-medium text-foreground">{stats?.total_documents || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Model:</span>
