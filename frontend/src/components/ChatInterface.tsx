@@ -20,6 +20,7 @@ interface Match {
   housing: string;
   score: number;
   highlights: string[];
+  matchReason?: string; // AI-generated reason for this specific match
   explanation: {
     semantic: number;
     reason: string;
@@ -178,6 +179,7 @@ export const ChatInterface = () => {
                 location: source.location || `${source.city || ''}, ${source.state || ''}`.trim() || "Not specified",
                 housing: source.housing_type || "Not specified",
                 score: Math.round(score >= 1 ? score * 10 : score * 100),
+                matchReason: hit.match_reason || source.match_reason, // AI-generated match reason
                 highlights: source.highlights || source.key_strengths || [
                   source.motivation ? `${source.motivation.substring(0, 120)}...` : null,
                   source.experience_level ? `Experience: ${source.experience_level}` : null,
@@ -286,42 +288,14 @@ export const ChatInterface = () => {
         setShowTrace(true);
       }
 
-      // Transform the backend response to match ApplicationAnalysis component format
-      const backendAnalysis = result.analysis as any; // Backend returns different structure
-      const transformedAnalysis = backendAnalysis ? {
-        applicantName: "Applicant", // We don't have applicant name from free text
-        strengths: [], // Will be populated from patterns if available
-        experienceLevel: "Not specified",
-        bestSuitedFor: [],
-        successRate: backendAnalysis.prediction?.confidence || 0,
-        successFactors: {}, // Will be populated from patterns if available
-        recommendedDogs: (backendAnalysis.recommended_dogs || []).map((dog: any) => ({
-          id: dog._id || dog.id || "unknown",
-          name: dog._source?.name || dog.data?.name || "Unknown Dog",
-          breed: dog._source?.breed || dog.data?.breed || "Mixed",
-          age: dog._source?.age || dog.data?.age || 0,
-          matchScore: Math.round((dog._score || dog.score || 0.5) * 100),
-          reasons: [],
-        })),
-        similarAdopters: (backendAnalysis.similar_successful_adopters || []).map((adopter: any) => ({
-          name: adopter._source?.applicant_name || adopter.data?.applicant_name || "Unknown",
-          similarity: Math.round((adopter._score || adopter.score || 0.5) * 100),
-          dogName: adopter._source?.dog_name || adopter.data?.dog_name || "Unknown",
-          dogAge: adopter._source?.dog_age || adopter.data?.dog_age || 0,
-          adoptionDate: adopter._source?.adoption_date || adopter.data?.adoption_date || "Unknown",
-          outcome: "successful" as const,
-          traits: [],
-          followUp: [],
-          successFactors: [adopter._source?.success_factors || adopter.data?.success_factors || ""].filter(Boolean),
-        })),
-      } : null;
+      // Get the formatted summary text from the backend
+      const formattedSummary = result.text || "Application analysis complete";
 
       const analysisMessage: Message = {
         id: messages.length + 2,
         role: "assistant" as const,
-        content: "📊 Application Analysis Complete",
+        content: formattedSummary,  // Use the formatted ChatGPT-style summary
         timestamp: new Date(),
-        applicationAnalysis: transformedAnalysis,
       };
       setMessages((prev) => [...prev, analysisMessage]);
     } catch (error) {
@@ -359,6 +333,7 @@ export const ChatInterface = () => {
             location: source.location || `${source.city || ''}, ${source.state || ''}`.trim() || "Not specified",
             housing: source.housing_type || "Not specified",
             score: Math.round(score >= 1 ? score * 10 : score * 100),
+            matchReason: hit.match_reason || source.match_reason, // AI-generated match reason
             highlights: source.highlights || source.key_strengths || [
               source.motivation ? `${source.motivation.substring(0, 120)}...` : null,
               source.experience_level ? `Experience: ${source.experience_level}` : null,

@@ -44,15 +44,25 @@ async def handle_chat_message(request: ChatRequest):
 
         logger.info(f"📋 Context has {len(applicants_data)} applicants stored")
 
+        # Check if this is a similarity/search query (should be treated as find_adopters, not applicant_details)
+        is_similarity_query = any(keyword in message_lower for keyword in [
+            "similar", "like", "find", "search", "best", "who are", "show me adopters"
+        ])
+
+        # Only treat as applicant query if:
+        # 1. We have applicants in context
+        # 2. It's NOT a similarity/search query
+        # 3. It contains keywords for viewing details
         is_applicant_query = (
             applicants_data and
+            not is_similarity_query and
             any(keyword in message_lower for keyword in [
-                "details", "tell me", "about", "more", "show me",
-                "give me", "what", "who", "information"
+                "details", "tell me about", "more about", "show me details",
+                "give me information", "what about", "information about"
             ])
         )
 
-        logger.info(f"🔍 Is applicant query: {is_applicant_query}")
+        logger.info(f"🔍 Is similarity query: {is_similarity_query}, Is applicant query: {is_applicant_query}")
 
         if is_applicant_query:
             # Extract applicant name from the message
@@ -216,11 +226,14 @@ async def handle_chat_message(request: ChatRequest):
                 }
             )
 
+            # Get formatted summary text
+            formatted_text = result.get("formatted_summary", "Application analysis completed")
+
             # Save AI response to GCS with full analysis data
             storage_service.save_chat_message(
                 session_id=session_id,
                 role="assistant",
-                content="Application analysis completed",
+                content=formatted_text,  # Save formatted summary as content
                 intent=intent["type"],
                 metadata={
                     "applicationAnalysis": result  # Save full analysis for display in history
@@ -233,7 +246,10 @@ async def handle_chat_message(request: ChatRequest):
                 "success": True,
                 "intent": intent["type"],
                 "session_id": session_id,
-                "response": result,
+                "response": {
+                    "text": formatted_text,  # Return formatted summary as main text
+                    "analysis": result,  # Keep full analysis for optional use
+                },
                 "trace": {
                     "steps": trace_steps,
                     "total_duration_ms": total_duration,
@@ -427,9 +443,13 @@ async def analyze_application(request: AnalyzeApplicationRequest):
 
         total_duration = int((time.time() - start_time) * 1000)
 
+        # Get formatted summary text
+        formatted_text = analysis.get("formatted_summary", "Application analysis completed")
+
         return {
             "success": True,
-            "analysis": analysis,
+            "text": formatted_text,  # Return formatted summary as main text
+            "analysis": analysis,  # Keep full analysis for optional use
             "trace": {
                 "steps": trace_steps,
                 "total_duration_ms": total_duration,

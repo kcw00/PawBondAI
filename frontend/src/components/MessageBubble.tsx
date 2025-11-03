@@ -82,12 +82,28 @@ const formatMarkdown = (text: string) => {
     .replace(/```(.*?)```/gs, '<pre class="bg-muted p-2 rounded my-2 overflow-x-auto"><code>$1</code></pre>')
     // Inline code
     .replace(/`(.*?)`/g, '<code class="bg-muted px-1 py-0.5 rounded text-sm">$1</code>')
+    // Headers (must be at start of line)
+    .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold mt-3 mb-0">$1</h3>')
+    .replace(/^## (.*$)/gm, '<h2 class="text-xl font-bold mt-4 mb-0">$1</h2>')
+    .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold mt-5 mb-4">$1</h1>')
     // Bold (must come before italic)
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
     // Italic (now only matches single asterisks that aren't at line start)
     .replace(/\*([^\*\n]+?)\*/g, '<em>$1</em>')
     // Links
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-primary underline" target="_blank">$1</a>');
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-primary underline" target="_blank">$1</a>')
+    // Line breaks (convert double line breaks to paragraphs)
+    .replace(/\n\n/g, '<br/><br/>')
+    // Remove extra breaks after headings
+    .replace(/(<\/h[123]>)\s*<br\/>\s*<br\/>/g, '$1<br/>')
+    .replace(/(<\/h[123]>)\s*<br\/>/g, '$1')
+    // Remove extra breaks after lists (but keep one break before next heading)
+    .replace(/(<\/ul>)\s*<br\/>\s*<br\/>\s*(?=<h[123])/g, '$1<br/>')
+    .replace(/(<\/ul>)\s*<br\/>\s*<br\/>/g, '$1')
+    .replace(/(<\/ul>)\s*<br\/>\s*(?!<h[123])/g, '$1')
+    .replace(/(<\/ol>)\s*<br\/>\s*<br\/>\s*(?=<h[123])/g, '$1<br/>')
+    .replace(/(<\/ol>)\s*<br\/>\s*<br\/>/g, '$1')
+    .replace(/(<\/ol>)\s*<br\/>\s*(?!<h[123])/g, '$1');
 
   return formatted;
 };
@@ -100,9 +116,8 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
       <div className={`flex items-start space-x-4 max-w-3xl w-full`}>
         {/* Avatar */}
         <div
-          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-            isUser ? "bg-chat-user" : "bg-primary"
-          }`}
+          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isUser ? "bg-chat-user" : "bg-primary"
+            }`}
         >
           {isUser ? (
             <User className="h-4 w-4 text-white" />
@@ -115,9 +130,9 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
         <div className="flex-1 space-y-2">
           {message.attachedImage && (
             <div className="rounded-lg overflow-hidden border border-border">
-              <img 
-                src={message.attachedImage} 
-                alt="Uploaded" 
+              <img
+                src={message.attachedImage}
+                alt="Uploaded"
                 className="max-w-full h-auto max-h-64 object-cover"
               />
             </div>
@@ -130,7 +145,7 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
               <span className="text-xs text-foreground">Medical document attached</span>
             </div>
           )}
-          <div 
+          <div
             className="prose prose-sm max-w-none text-foreground leading-relaxed"
             dangerouslySetInnerHTML={{ __html: formatMarkdown(message.content) }}
           />

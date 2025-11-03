@@ -67,6 +67,7 @@ export interface ApplicationAnalysis {
 
 export interface AnalyzeApplicationResponse {
   success: boolean;
+  text?: string;  // Formatted ChatGPT-style summary from Gemini
   analysis: ApplicationAnalysis;
   trace?: TraceData;
 }
