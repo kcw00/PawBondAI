@@ -104,7 +104,7 @@ async def get_application(application_id: str):
 # ~~~~worked! testing done by with postman.
 @router.get("", response_model=List[ApplicationResponse])
 async def list_applications(
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     status: Optional[str] = Query(None, description="Filter by application status"),
     experience_level: Optional[str] = Query(None, description="Filter by experience level"),

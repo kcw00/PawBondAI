@@ -383,6 +383,18 @@ async def get_index_statistics():
                 "timestamp": last_outcome.created_at if hasattr(last_outcome, "created_at") else None,
             })
 
+        # Recent medical documents
+        recent_medical = AsyncSearch(using=es_client.client, index=settings.medical_documents_index)
+        recent_medical = recent_medical.sort("-upload_date")[0:1]
+        medical_response = await recent_medical.execute()
+        if len(medical_response) > 0:
+            last_medical = medical_response[0]
+            recent_activity.append({
+                "type": "medical_documents",
+                "count": medical_docs_count,
+                "timestamp": last_medical.upload_date if hasattr(last_medical, "upload_date") else None,
+            })
+
         # Sort by timestamp
         recent_activity.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 

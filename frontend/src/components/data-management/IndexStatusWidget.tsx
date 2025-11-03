@@ -172,16 +172,21 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
 
                 <div className="space-y-3">
                   {stats?.recent_activity && stats.recent_activity.length > 0 ? (
-                    stats.recent_activity.map((activity, idx) => (
-                      <div key={idx}>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          • {formatTimestamp(activity.timestamp)}
-                        </p>
-                        <p className="text-sm text-foreground">
-                          Indexed {activity.count} {activity.type}
-                        </p>
-                      </div>
-                    ))
+                    stats.recent_activity.map((activity, idx) => {
+                      const displayName = activity.type === 'medical_documents'
+                        ? 'medical documents'
+                        : activity.type;
+                      return (
+                        <div key={idx}>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            • {formatTimestamp(activity.timestamp)}
+                          </p>
+                          <p className="text-sm text-foreground">
+                            Indexed {activity.count} {displayName}
+                          </p>
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-muted-foreground">No recent activity</p>
                   )}

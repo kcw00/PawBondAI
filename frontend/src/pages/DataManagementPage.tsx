@@ -257,13 +257,13 @@ export default function DataManagementPage() {
     try {
       let endpoint = '';
       if (type === 'applications') {
-        endpoint = `${API_BASE_URL}/applications?limit=10`;
+        endpoint = `${API_BASE_URL}/applications?limit=10000`;
       } else if (type === 'dogs') {
-        endpoint = `${API_BASE_URL}/dogs?limit=10`;
+        endpoint = `${API_BASE_URL}/dogs?limit=10000`;
       } else if (type === 'medical') {
-        endpoint = `${API_BASE_URL}/medical-documents?limit=10`;
+        endpoint = `${API_BASE_URL}/medical-documents?limit=10000`;
       } else {
-        endpoint = `${API_BASE_URL}/outcomes?limit=10`;
+        endpoint = `${API_BASE_URL}/outcomes?limit=10000`;
       }
 
       console.log(`Fetching ${type} from:`, endpoint);

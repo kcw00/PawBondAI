@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Body
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Body, Query
 from typing import List, Dict, Any
 from datetime import datetime
 import uuid
@@ -180,7 +180,7 @@ async def get_dog(dog_id: str):
 
 
 @router.get("", response_model=List[DogResponse])
-async def list_dogs(limit: int = 10):
+async def list_dogs(limit: int = Query(10, ge=1, le=10000)):
     """List all dogs using AsyncSearch"""
     try:
         logger.info(f"Fetching dogs from index: {settings.dogs_index}, limit: {limit}")
