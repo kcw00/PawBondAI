@@ -305,37 +305,53 @@ RULES:
         # Prepare data for Gemini
         matches_summary = []
         for i, hit in enumerate(hits[:5], 1):  # Top 5 for context
-            source = hit.get("_source", {})
-            score = hit.get("_score", 0)
+            # Handle both _source (Elasticsearch) and data (custom format)
+            source = hit.get("_source") or hit.get(
+                "data", {}
+            )  # should handle both formats
+            score = hit.get("_score") or hit.get("score", 0)
+
+            # Debug logging
+            logger.info(
+                f"Processing hit {i}: applicant={source.get('applicant_name')}, housing={source.get('housing_type')}, experience={source.get('experience_level')}"
+            )
 
             if search_type == "adopters":
                 # Use translated motivation if available (for multilingual support)
                 motivation_text = source.get(
                     "translated_motivation", source.get("motivation", "")
-                )[:300]  # Increased from 200 to 300 for better context
+                )[
+                    :500
+                ]  # Increased to 500 for better context in match reasons
                 language_info = (
                     f" [Original: {source.get('language_name', 'English')}]"
                     if source.get("original_language", "en") != "en"
                     else ""
                 )
 
-                matches_summary.append(
-                    {
-                        "rank": i,
-                        "name": source.get("applicant_name", "Unknown") + language_info,
-                        "score": round(score, 3),
-                        "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(
-                            ", "
-                        ),
-                        "housing": source.get("housing_type", ""),
-                        "motivation": motivation_text,  # Translated if non-English
-                        "experience": source.get("experience_level", ""),
-                        "employment": source.get("employment_status", ""),
-                        "has_yard": source.get("has_yard", False),
-                        "yard_size": source.get("yard_size", ""),
-                        "other_pets": source.get("other_pets_description", ""),
-                    }
-                )
+                # Build a comprehensive match summary with all available fields
+                match_data = {
+                    "rank": i,
+                    "name": source.get("applicant_name", "Unknown") + language_info,
+                    "score": round(score, 3),
+                    "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(
+                        ", "
+                    )
+                    or "Location not specified",
+                    "housing": source.get("housing_type", "Not specified"),
+                    "motivation": motivation_text or "No motivation provided",
+                    "experience": source.get("experience_level", "Not specified"),
+                    "employment": source.get("employment_status", "Not specified"),
+                    "has_yard": source.get("has_yard", False),
+                    "yard_size": source.get("yard_size", "") or "Not specified",
+                    "other_pets": source.get("other_pets_description", "")
+                    or "No other pets mentioned",
+                    "family_members": source.get("family_members", "")
+                    or "Not specified",
+                    "previous_dog": source.get("previous_dog", False),
+                }
+
+                matches_summary.append(match_data)
             else:
                 matches_summary.append(
                     {
@@ -349,19 +365,28 @@ RULES:
                 )
 
         # Generate individual match reasons for each result
-        reasons_prompt = f"""You are an expert adoption coordinator. Analyze why each adopter is a GOOD match for the search query.
+        reasons_prompt = f"""You are an expert adoption coordinator. For each adopter below, explain WHY they are a good match.
 
 User query: "{query}"
 
 Top matches from Elasticsearch semantic search:
 {json.dumps(matches_summary, indent=2)}
 
-IMPORTANT: These adopters were ALREADY matched by our semantic search algorithm. Your job is to explain WHY they are good matches.
+CONTEXT: These adopters were ALREADY selected by our AI semantic search. Your job is to explain the match using the data provided.
 
-For EACH match, write a positive, concise 1-2 sentence explanation of WHY they are a good match for this query. Focus on:
-- What specific factors from their profile align with the query requirements
-- Their relevant experience, housing situation, motivation, or lifestyle strengths
-- What makes them well-suited for this specific request
+For EACH adopter, write a 1-2 sentence explanation using SPECIFIC DETAILS from their profile:
+
+GOOD EXAMPLES:
+- "Sarah's work-from-home lifestyle and previous experience with rescue dogs makes her ideal for a dog needing extra attention and patience during adjustment."
+- "With a large fenced yard and background in veterinary care, Michael can provide both the physical space and medical expertise for a senior dog."
+- "Jennifer's motivation emphasizes long-term commitment and her apartment lifestyle shows she's prepared for the daily walking routine an active dog needs."
+
+BAD EXAMPLES (Don't do this):
+- "Information is unknown" ❌
+- "Need to gather more information" ❌
+- "Semantic search determined they match" ❌
+
+USE THE DATA: Look at their housing, experience, employment, motivation text, yard info, and other_pets to write specific reasons.
 
 Return ONLY valid JSON (no markdown fences):
 {{
@@ -369,63 +394,125 @@ Return ONLY valid JSON (no markdown fences):
     {{
       "rank": 1,
       "name": "adopter name",
-      "reason": "Positive explanation of why they match (1-2 sentences)"
+      "reason": "Specific reason using their housing/experience/motivation/employment details"
     }},
     ...
   ]
 }}
 
 RULES:
-- These are PRE-FILTERED matches - focus on POSITIVE reasons why they fit
-- Reference concrete details from their profile (housing, experience, motivation, employment)
-- Keep each reason to 1-2 sentences
-- Be specific and constructive
-- Do NOT say things like "profile is empty" or "doesn't meet criteria" - if they're in the results, they DO match
-- Focus on what makes them SUITABLE, not unsuitable
+1. Use ACTUAL details from the adopter's profile (their housing type, experience level, employment status, motivation text, yard info, other pets)
+2. Be SPECIFIC - mention concrete factors like "work from home", "large yard", "experienced with senior dogs", "patient personality"
+3. If motivation text is provided, reference themes from it
+4. 1-2 sentences maximum
+5. Never say "information is unknown" - use what's available in their profile data
+6. IMPORTANT: The data is in the JSON above - look at each adopter's housing, experience, employment, motivation fields
 """
 
         try:
             # Generate match reasons
+            logger.info(
+                f"Generating match reasons for {len(matches_summary)} adopters with query: {query}"
+            )
+            logger.info(
+                f"Sample match data being sent to Gemini: {json.dumps(matches_summary[0] if matches_summary else {}, indent=2)}"
+            )
             reasons_response = await self.client.aio.models.generate_content(
                 model=self.model_id,
                 contents=reasons_prompt,
             )
             reasons_text = (reasons_response.text or "").strip()
+            logger.info(
+                f"Raw Gemini response for match reasons: {reasons_text[:200]}..."
+            )
 
             # Clean markdown fences
             if reasons_text.startswith("```"):
                 lines = reasons_text.split("\n")
                 reasons_text = "\n".join(lines[1:-1]).strip()
-            reasons_text = reasons_text.replace("```json", "").replace("```", "").strip()
+            reasons_text = (
+                reasons_text.replace("```json", "").replace("```", "").strip()
+            )
 
             # Parse match reasons
             reasons_data = json.loads(reasons_text)
             match_reasons = reasons_data.get("match_reasons", [])
+            logger.info(f"Parsed {len(match_reasons)} match reasons from Gemini")
 
             # Add reasons back to the original hits
             for hit in hits:
-                source = hit.get("_source", {})
+                # Handle both _source (Elasticsearch) and data (custom format)
+                source = hit.get("_source") or hit.get("data", {})
                 applicant_name = source.get("applicant_name", "")
 
                 # Find the matching reason
                 for reason_entry in match_reasons:
-                    if reason_entry.get("name", "").lower() in applicant_name.lower() or \
-                       applicant_name.lower() in reason_entry.get("name", "").lower():
-                        hit["match_reason"] = reason_entry.get("reason", "Good match based on profile similarity")
+                    if (
+                        reason_entry.get("name", "").lower() in applicant_name.lower()
+                        or applicant_name.lower()
+                        in reason_entry.get("name", "").lower()
+                    ):
+                        hit["match_reason"] = reason_entry.get(
+                            "reason", "Good match based on profile similarity"
+                        )
+                        logger.info(
+                            f"✓ Added reason for {applicant_name}: {hit['match_reason'][:80]}..."
+                        )
                         break
 
-                # Fallback if no reason found
+                # Fallback if no reason found - create a basic one from available data
                 if "match_reason" not in hit:
-                    hit["match_reason"] = "Matches your search criteria based on their profile and motivation"
+                    experience = source.get("experience_level", "")
+                    housing = source.get("housing_type", "")
+                    employment = source.get("employment_status", "")
 
-            logger.info(f"Generated match reasons for {len(match_reasons)} adopters")
+                    reason_parts = []
+                    if experience:
+                        reason_parts.append(f"{experience} with dogs")
+                    if housing:
+                        reason_parts.append(f"lives in a {housing.lower()}")
+                    if (
+                        employment
+                        and "remote" in employment.lower()
+                        or "home" in employment.lower()
+                    ):
+                        reason_parts.append("works from home for consistent care")
+
+                    if reason_parts:
+                        hit["match_reason"] = (
+                            "Strong match: " + ", ".join(reason_parts) + "."
+                        )
+                    else:
+                        hit["match_reason"] = (
+                            "Matched based on their application profile and compatibility with your requirements."
+                        )
+
+                    logger.warning(
+                        f"Using fallback reason for {applicant_name}: {hit['match_reason']}"
+                    )
+
+            logger.info(
+                f"✓ Successfully generated match reasons for all {len(hits)} adopters"
+            )
 
         except Exception as e:
-            logger.error(f"Error generating match reasons: {e}")
-            # Fallback: add generic reasons
+            logger.error(f"Error generating match reasons: {e}", exc_info=True)
+            # Fallback: add data-driven reasons
             for hit in hits:
                 if "match_reason" not in hit:
-                    hit["match_reason"] = "Strong match based on their application profile and experience"
+                    # Handle both _source (Elasticsearch) and data (custom format)
+                    source = hit.get("_source") or hit.get("data", {})
+                    experience = source.get("experience_level", "")
+                    housing = source.get("housing_type", "")
+
+                    if experience and housing:
+                        hit["match_reason"] = (
+                            f"Matched based on their {experience.lower()} and {housing.lower()} living situation."
+                        )
+                    else:
+                        hit["match_reason"] = (
+                            "Strong match based on their application profile and compatibility."
+                        )
 
         # Generate overall summary
         prompt = f"""You are a helpful rescue coordinator AI assistant. A user searched for: "{query}"
