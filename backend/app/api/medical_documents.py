@@ -129,7 +129,7 @@ async def get_medical_document(document_id: str):
 # 3. List medical documents with filters
 @router.get("")
 async def list_medical_documents(
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     dog_id: Optional[str] = Query(None),
     document_type: Optional[str] = Query(None),

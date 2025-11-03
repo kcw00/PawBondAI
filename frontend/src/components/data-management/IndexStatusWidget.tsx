@@ -5,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/services/api";
 
 interface IndexStats {
   total_documents: number;
   applications_count: number;
   dogs_count: number;
   outcomes_count: number;
+  medical_documents_count: number;
   recent_activity: Array<{
     type: string;
     count: number;
@@ -31,7 +33,7 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/analytics/index-stats');
+      const response = await fetch(`${API_BASE_URL}/analytics/index-stats`);
       if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
       setStats(data);
@@ -113,8 +115,12 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
                       <span className="font-semibold text-foreground">{stats?.dogs_count || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">└─ Outcomes:</span>
+                      <span className="text-muted-foreground">├─ Outcomes:</span>
                       <span className="font-semibold text-foreground">{stats?.outcomes_count || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">└─ Medical Docs:</span>
+                      <span className="font-semibold text-foreground">{stats?.medical_documents_count || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -126,7 +132,7 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total embeddings:</span>
-                    <span className="font-medium text-foreground">{stats?.applications_count || 0}</span>
+                    <span className="font-medium text-foreground">{stats?.total_documents || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Model:</span>
@@ -166,16 +172,21 @@ export const IndexStatusWidget = ({ refreshTrigger }: IndexStatusWidgetProps) =>
 
                 <div className="space-y-3">
                   {stats?.recent_activity && stats.recent_activity.length > 0 ? (
-                    stats.recent_activity.map((activity, idx) => (
-                      <div key={idx}>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          • {formatTimestamp(activity.timestamp)}
-                        </p>
-                        <p className="text-sm text-foreground">
-                          Indexed {activity.count} {activity.type}
-                        </p>
-                      </div>
-                    ))
+                    stats.recent_activity.map((activity, idx) => {
+                      const displayName = activity.type === 'medical_documents'
+                        ? 'medical documents'
+                        : activity.type;
+                      return (
+                        <div key={idx}>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            • {formatTimestamp(activity.timestamp)}
+                          </p>
+                          <p className="text-sm text-foreground">
+                            Indexed {activity.count} {displayName}
+                          </p>
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-muted-foreground">No recent activity</p>
                   )}

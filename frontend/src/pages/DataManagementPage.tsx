@@ -10,6 +10,7 @@ import { EmbeddingPreviewModal } from "@/components/data-management/EmbeddingPre
 import { ViewDataModal } from "@/components/data-management/ViewDataModal";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/services/api";
 
 interface RecentUpload {
   filename: string;
@@ -48,12 +49,13 @@ export default function DataManagementPage() {
   const dogsInputRef = useRef<HTMLInputElement>(null);
   const casesInputRef = useRef<HTMLInputElement>(null);
   const medicalInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch indexed counts on mount
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/analytics/index-stats');
+        const response = await fetch(`${API_BASE_URL}/analytics/index-stats`);
         if (response.ok) {
           const data = await response.json();
           setIndexedCounts({
@@ -69,6 +71,46 @@ export default function DataManagementPage() {
     };
     fetchCounts();
   }, [refreshTrigger]);
+
+  // Scroll spy to update active tab based on scroll position
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const sections = [
+        { id: 'applications-section', tab: 'applications' as const },
+        { id: 'dogs-section', tab: 'dogs' as const },
+        { id: 'cases-section', tab: 'cases' as const },
+        { id: 'medical-section', tab: 'medical' as const },
+      ];
+
+      const offset = 150; // Offset from top to trigger tab change
+
+      // Find which section is currently most visible
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const section = document.getElementById(sections[i].id);
+        if (section) {
+          const rect = section.getBoundingClientRect();
+          const containerRect = scrollContainer.getBoundingClientRect();
+
+          // Check if section is in view (considering offset)
+          const sectionTopRelative = rect.top - containerRect.top;
+
+          if (sectionTopRelative <= offset) {
+            setActiveTab(sections[i].tab);
+            break;
+          }
+        }
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    // Also run on mount to set initial state
+    handleScroll();
+
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const processFile = async (file: File, type: 'applications' | 'dogs' | 'cases' | 'medical') => {
 
@@ -97,7 +139,7 @@ export default function DataManagementPage() {
 
       setUploadProgress(prev => prev ? { ...prev, stage: 'parsing' } : null);
 
-      const response = await fetch(`http://localhost:8000${uploadEndpoint}`, {
+      const response = await fetch(`${API_BASE_URL.replace('/api/v1', '')}${uploadEndpoint}`, {
         method: 'POST',
         body: formData,
       });
@@ -215,13 +257,13 @@ export default function DataManagementPage() {
     try {
       let endpoint = '';
       if (type === 'applications') {
-        endpoint = 'http://localhost:8000/api/v1/applications?limit=10';
+        endpoint = `${API_BASE_URL}/applications?limit=10000`;
       } else if (type === 'dogs') {
-        endpoint = 'http://localhost:8000/api/v1/dogs?limit=10';
+        endpoint = `${API_BASE_URL}/dogs?limit=10000`;
       } else if (type === 'medical') {
-        endpoint = 'http://localhost:8000/api/v1/medical-documents?limit=10';
+        endpoint = `${API_BASE_URL}/medical-documents?limit=10000`;
       } else {
-        endpoint = 'http://localhost:8000/api/v1/outcomes?limit=10';
+        endpoint = `${API_BASE_URL}/outcomes?limit=10000`;
       }
 
       console.log(`Fetching ${type} from:`, endpoint);
@@ -351,7 +393,7 @@ export default function DataManagementPage() {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
             {/* Pipeline Visualization - Applies to All Data Types */}
             <div className="p-4 bg-muted/30 rounded-lg border border-border">

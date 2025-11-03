@@ -9,6 +9,7 @@ interface Match {
   housing: string;
   score: number;
   highlights: string[];
+  matchReason?: string; // AI-generated reason for this specific match
   explanation: {
     semantic: number;
     reason: string;
@@ -62,6 +63,23 @@ export const MatchCard = ({ match }: MatchCardProps) => {
           </div>
         </div>
       </div>
+
+      {/* AI Match Reason */}
+      {match.matchReason && (
+        <div className="mb-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
+          <div className="flex items-start">
+            <div className="mt-0.5 mr-2 flex-shrink-0">
+              <svg className="h-4 w-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-primary mb-1">Why this match?</p>
+              <p className="text-sm text-foreground leading-relaxed">{match.matchReason}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Highlights */}
       <div className="space-y-2 mb-4">

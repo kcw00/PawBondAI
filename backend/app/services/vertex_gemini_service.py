@@ -27,9 +27,13 @@ class VertexGeminiService:
 
     def __init__(self):
         # Log ADC identity so we know which SA needs roles
-        creds, proj = google_auth_default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        creds, proj = google_auth_default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
         email = getattr(creds, "service_account_email", "(no-email)")
-        logger.info(f"🔎 ADC identity for Vertex: {email} (project seen by ADC: {proj})")
+        logger.info(
+            f"🔎 ADC identity for Vertex: {email} (project seen by ADC: {proj})"
+        )
 
         self.location = settings.vertex_ai_location
         self.project_id = settings.gcp_project_id
@@ -108,7 +112,9 @@ Return ONLY JSON (no markdown fences).
             if self._is_region_not_found(e) and self.location != "us-central1":
                 logger.warning("Retrying Gemini call in us-central1")
                 try:
-                    response = await self._generate_in_region_async(prompt, "us-central1")
+                    response = await self._generate_in_region_async(
+                        prompt, "us-central1"
+                    )
                 except Exception as e2:
                     logger.error(f"Retry in us-central1 failed: {e2}")
                     return self._fallback_sentiment_analysis(text)
@@ -120,11 +126,15 @@ Return ONLY JSON (no markdown fences).
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1]).strip()
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            response_text = (
+                response_text.replace("```json", "").replace("```", "").strip()
+            )
 
             analysis = json.loads(response_text)
             analysis["text_length"] = len(text.split())
-            logger.info(f"Sentiment analysis complete: {analysis['sentiment']['interpretation']}")
+            logger.info(
+                f"Sentiment analysis complete: {analysis['sentiment']['interpretation']}"
+            )
             return analysis
         except Exception as e:
             logger.error(f"JSON parsing error in sentiment analysis: {e}")
@@ -147,7 +157,9 @@ Return ONLY JSON (no markdown fences).
         neg_count = sum(1 for w in negative_words if w in text_lower)
         score = (pos_count - neg_count) / max(word_count, 1)
         score = max(-1.0, min(1.0, score))
-        commitment_score = min(100, 50 + (word_count // 10) + (pos_count * 10) - (neg_count * 15))
+        commitment_score = min(
+            100, 50 + (word_count // 10) + (pos_count * 10) - (neg_count * 15)
+        )
         return {
             "sentiment": {
                 "score": score,
@@ -215,7 +227,9 @@ RULES:
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1]).strip()
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            response_text = (
+                response_text.replace("```json", "").replace("```", "").strip()
+            )
 
             extracted = json.loads(response_text)
             result = {
@@ -226,9 +240,15 @@ RULES:
                 "adoption_readiness": extracted.get("adoption_readiness", "ready"),
                 "medical_summary": extracted.get("medical_summary", ""),
             }
-            if result["adoption_readiness"] not in {"ready", "needs_treatment", "long_term_care"}:
+            if result["adoption_readiness"] not in {
+                "ready",
+                "needs_treatment",
+                "long_term_care",
+            }:
                 result["adoption_readiness"] = "ready"
-            logger.info(f"Extracted medical data for {dog_name}: {result['adoption_readiness']}")
+            logger.info(
+                f"Extracted medical data for {dog_name}: {result['adoption_readiness']}"
+            )
             return result
         except Exception as e:
             logger.error(f"Error extracting medical data: {e}")
@@ -260,13 +280,11 @@ RULES:
     # SEARCH RESULT FORMATTING
     # ========================================
     async def format_search_results(
-        self,
-        query: str,
-        search_results: Dict[str, Any],
-        search_type: str = "adopters"
+        self, query: str, search_results: Dict[str, Any], search_type: str = "adopters"
     ) -> str:
         """
         Format Elasticsearch search results into natural language using Gemini.
+        Also generates individual match reasons for each result.
 
         Args:
             query: The original user query
@@ -287,34 +305,216 @@ RULES:
         # Prepare data for Gemini
         matches_summary = []
         for i, hit in enumerate(hits[:5], 1):  # Top 5 for context
-            source = hit.get("_source", {})
-            score = hit.get("_score", 0)
+            # Handle both _source (Elasticsearch) and data (custom format)
+            source = hit.get("_source") or hit.get(
+                "data", {}
+            )  # should handle both formats
+            score = hit.get("_score") or hit.get("score", 0)
+
+            # Debug logging
+            logger.info(
+                f"Processing hit {i}: applicant={source.get('applicant_name')}, housing={source.get('housing_type')}, experience={source.get('experience_level')}"
+            )
 
             if search_type == "adopters":
                 # Use translated motivation if available (for multilingual support)
-                motivation_text = source.get("translated_motivation", source.get("motivation", ""))[:200]
-                language_info = f" [Original: {source.get('language_name', 'English')}]" if source.get("original_language", "en") != "en" else ""
-                
-                matches_summary.append({
+                motivation_text = source.get(
+                    "translated_motivation", source.get("motivation", "")
+                )[
+                    :500
+                ]  # Increased to 500 for better context in match reasons
+                language_info = (
+                    f" [Original: {source.get('language_name', 'English')}]"
+                    if source.get("original_language", "en") != "en"
+                    else ""
+                )
+
+                # Build a comprehensive match summary with all available fields
+                match_data = {
                     "rank": i,
                     "name": source.get("applicant_name", "Unknown") + language_info,
                     "score": round(score, 3),
-                    "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(", "),
-                    "housing": source.get("housing_type", ""),
-                    "motivation": motivation_text,  # Translated if non-English
-                    "experience": source.get("experience_level", ""),
-                    "employment": source.get("employment_status", ""),
-                })
-            else:
-                matches_summary.append({
-                    "rank": i,
-                    "name": source.get("name", "Unknown"),
-                    "score": round(score, 3),
-                    "breed": source.get("breed", ""),
-                    "age": source.get("age", ""),
-                    "personality": source.get("personality_traits", "")[:200],
-                })
+                    "location": f"{source.get('city', '')}, {source.get('state', '')}".strip(
+                        ", "
+                    )
+                    or "Location not specified",
+                    "housing": source.get("housing_type", "Not specified"),
+                    "motivation": motivation_text or "No motivation provided",
+                    "experience": source.get("experience_level", "Not specified"),
+                    "employment": source.get("employment_status", "Not specified"),
+                    "has_yard": source.get("has_yard", False),
+                    "yard_size": source.get("yard_size", "") or "Not specified",
+                    "other_pets": source.get("other_pets_description", "")
+                    or "No other pets mentioned",
+                    "family_members": source.get("family_members", "")
+                    or "Not specified",
+                    "previous_dog": source.get("previous_dog", False),
+                }
 
+                matches_summary.append(match_data)
+            else:
+                matches_summary.append(
+                    {
+                        "rank": i,
+                        "name": source.get("name", "Unknown"),
+                        "score": round(score, 3),
+                        "breed": source.get("breed", ""),
+                        "age": source.get("age", ""),
+                        "personality": source.get("personality_traits", "")[:200],
+                    }
+                )
+
+        # Generate individual match reasons for each result
+        reasons_prompt = f"""You are an expert adoption coordinator. For each adopter below, explain WHY they are a good match.
+
+User query: "{query}"
+
+Top matches from Elasticsearch semantic search:
+{json.dumps(matches_summary, indent=2)}
+
+CONTEXT: These adopters were ALREADY selected by our AI semantic search. Your job is to explain the match using the data provided.
+
+For EACH adopter, write a 1-2 sentence explanation using SPECIFIC DETAILS from their profile:
+
+GOOD EXAMPLES:
+- "Sarah's work-from-home lifestyle and previous experience with rescue dogs makes her ideal for a dog needing extra attention and patience during adjustment."
+- "With a large fenced yard and background in veterinary care, Michael can provide both the physical space and medical expertise for a senior dog."
+- "Jennifer's motivation emphasizes long-term commitment and her apartment lifestyle shows she's prepared for the daily walking routine an active dog needs."
+
+BAD EXAMPLES (Don't do this):
+- "Information is unknown" ❌
+- "Need to gather more information" ❌
+- "Semantic search determined they match" ❌
+
+USE THE DATA: Look at their housing, experience, employment, motivation text, yard info, and other_pets to write specific reasons.
+
+Return ONLY valid JSON (no markdown fences):
+{{
+  "match_reasons": [
+    {{
+      "rank": 1,
+      "name": "adopter name",
+      "reason": "Specific reason using their housing/experience/motivation/employment details"
+    }},
+    ...
+  ]
+}}
+
+RULES:
+1. Use ACTUAL details from the adopter's profile (their housing type, experience level, employment status, motivation text, yard info, other pets)
+2. Be SPECIFIC - mention concrete factors like "work from home", "large yard", "experienced with senior dogs", "patient personality"
+3. If motivation text is provided, reference themes from it
+4. 1-2 sentences maximum
+5. Never say "information is unknown" - use what's available in their profile data
+6. IMPORTANT: The data is in the JSON above - look at each adopter's housing, experience, employment, motivation fields
+"""
+
+        try:
+            # Generate match reasons
+            logger.info(
+                f"Generating match reasons for {len(matches_summary)} adopters with query: {query}"
+            )
+            logger.info(
+                f"Sample match data being sent to Gemini: {json.dumps(matches_summary[0] if matches_summary else {}, indent=2)}"
+            )
+            reasons_response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=reasons_prompt,
+            )
+            reasons_text = (reasons_response.text or "").strip()
+            logger.info(
+                f"Raw Gemini response for match reasons: {reasons_text[:200]}..."
+            )
+
+            # Clean markdown fences
+            if reasons_text.startswith("```"):
+                lines = reasons_text.split("\n")
+                reasons_text = "\n".join(lines[1:-1]).strip()
+            reasons_text = (
+                reasons_text.replace("```json", "").replace("```", "").strip()
+            )
+
+            # Parse match reasons
+            reasons_data = json.loads(reasons_text)
+            match_reasons = reasons_data.get("match_reasons", [])
+            logger.info(f"Parsed {len(match_reasons)} match reasons from Gemini")
+
+            # Add reasons back to the original hits
+            for hit in hits:
+                # Handle both _source (Elasticsearch) and data (custom format)
+                source = hit.get("_source") or hit.get("data", {})
+                applicant_name = source.get("applicant_name", "")
+
+                # Find the matching reason
+                for reason_entry in match_reasons:
+                    if (
+                        reason_entry.get("name", "").lower() in applicant_name.lower()
+                        or applicant_name.lower()
+                        in reason_entry.get("name", "").lower()
+                    ):
+                        hit["match_reason"] = reason_entry.get(
+                            "reason", "Good match based on profile similarity"
+                        )
+                        logger.info(
+                            f"✓ Added reason for {applicant_name}: {hit['match_reason'][:80]}..."
+                        )
+                        break
+
+                # Fallback if no reason found - create a basic one from available data
+                if "match_reason" not in hit:
+                    experience = source.get("experience_level", "")
+                    housing = source.get("housing_type", "")
+                    employment = source.get("employment_status", "")
+
+                    reason_parts = []
+                    if experience:
+                        reason_parts.append(f"{experience} with dogs")
+                    if housing:
+                        reason_parts.append(f"lives in a {housing.lower()}")
+                    if (
+                        employment
+                        and "remote" in employment.lower()
+                        or "home" in employment.lower()
+                    ):
+                        reason_parts.append("works from home for consistent care")
+
+                    if reason_parts:
+                        hit["match_reason"] = (
+                            "Strong match: " + ", ".join(reason_parts) + "."
+                        )
+                    else:
+                        hit["match_reason"] = (
+                            "Matched based on their application profile and compatibility with your requirements."
+                        )
+
+                    logger.warning(
+                        f"Using fallback reason for {applicant_name}: {hit['match_reason']}"
+                    )
+
+            logger.info(
+                f"✓ Successfully generated match reasons for all {len(hits)} adopters"
+            )
+
+        except Exception as e:
+            logger.error(f"Error generating match reasons: {e}", exc_info=True)
+            # Fallback: add data-driven reasons
+            for hit in hits:
+                if "match_reason" not in hit:
+                    # Handle both _source (Elasticsearch) and data (custom format)
+                    source = hit.get("_source") or hit.get("data", {})
+                    experience = source.get("experience_level", "")
+                    housing = source.get("housing_type", "")
+
+                    if experience and housing:
+                        hit["match_reason"] = (
+                            f"Matched based on their {experience.lower()} and {housing.lower()} living situation."
+                        )
+                    else:
+                        hit["match_reason"] = (
+                            "Strong match based on their application profile and compatibility."
+                        )
+
+        # Generate overall summary
         prompt = f"""You are a helpful rescue coordinator AI assistant. A user searched for: "{query}"
 
 I found {len(hits)} matching {search_type} using Elasticsearch semantic search with multilingual support. Here are the top {len(matches_summary)} matches:
@@ -325,11 +525,13 @@ Note: Applications marked with [Original: Language] were submitted in that langu
 
 Write a friendly, conversational response (2-3 sentences) that:
 1. Confirms how many matches were found
-2. Highlights what makes the top matches relevant to the query
+2. Highlights what makes the top matches relevant to the query (e.g., "experienced adopters with yards" or "work-from-home applicants")
 3. If any matches are from non-English applications, briefly mention the multilingual capability
-4. Encourages the user to review the detailed match cards
+4. Encourages the user to review the detailed match cards below, where EACH card includes a specific explanation of why that adopter is a good fit
 
-Be warm and helpful. Don't repeat the technical data - that will be shown in cards below your message.
+IMPORTANT: Each match card below will have its own detailed "Why this match?" explanation, so you don't need to explain individual adopters. Focus on the overall findings.
+
+Be warm, confident, and helpful. Don't say things like "unable to provide details" - the details ARE provided in each match card.
 Don't use markdown formatting. Keep it natural and conversational.
 """
 
@@ -356,7 +558,7 @@ Don't use markdown formatting. Keep it natural and conversational.
         self,
         text: str,
         target_language: str = "English",
-        source_language: Optional[str] = None
+        source_language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Translate text using Gemini's multilingual capabilities.
@@ -369,7 +571,11 @@ Don't use markdown formatting. Keep it natural and conversational.
         Returns:
             Dictionary with translated_text, source_language, target_language
         """
-        source_lang_prompt = f"from {source_language}" if source_language else "(detect the source language)"
+        source_lang_prompt = (
+            f"from {source_language}"
+            if source_language
+            else "(detect the source language)"
+        )
 
         prompt = f"""You are a professional translator specializing in animal welfare and adoption documentation.
 
@@ -403,10 +609,14 @@ RULES:
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1]).strip()
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            response_text = (
+                response_text.replace("```json", "").replace("```", "").strip()
+            )
 
             result = json.loads(response_text)
-            logger.info(f"Translation complete: {result.get('source_language', 'unknown')} -> {target_language}")
+            logger.info(
+                f"Translation complete: {result.get('source_language', 'unknown')} -> {target_language}"
+            )
             return result
 
         except Exception as e:
@@ -416,7 +626,7 @@ RULES:
                 "source_language": source_language or "unknown",
                 "target_language": target_language,
                 "confidence": 0.0,
-                "error": str(e)
+                "error": str(e),
             }
 
     # ========================================
@@ -426,17 +636,17 @@ RULES:
         self,
         items: list[Dict[str, Any]],
         text_field: str = "text",
-        language_field: str = "language"
+        language_field: str = "language",
     ) -> list[Dict[str, Any]]:
         """
         Batch translate multiple documents to English for RAG pipeline.
         Only translates non-English documents; preserves English documents as-is.
-        
+
         Args:
             items: List of documents with text and language fields
             text_field: Field name containing the text to translate
             language_field: Field name containing the language code
-            
+
         Returns:
             List of documents with translated text in 'translated_text' field
         """
@@ -444,31 +654,33 @@ RULES:
             # Separate English and non-English items
             english_items = []
             non_english_items = []
-            
+
             for item in items:
-                lang = item.get(language_field, 'en')
-                if lang == 'en' or not lang:
+                lang = item.get(language_field, "en")
+                if lang == "en" or not lang:
                     # Keep English items as-is
-                    item['translated_text'] = item.get(text_field, '')
-                    item['translation_needed'] = False
+                    item["translated_text"] = item.get(text_field, "")
+                    item["translation_needed"] = False
                     english_items.append(item)
                 else:
-                    item['translation_needed'] = True
+                    item["translation_needed"] = True
                     non_english_items.append(item)
-            
+
             if not non_english_items:
                 logger.info("All items are in English, no translation needed")
                 return items
-            
-            logger.info(f"Translating {len(non_english_items)} items to English (keeping {len(english_items)} English items)")
-            
+
+            logger.info(
+                f"Translating {len(non_english_items)} items to English (keeping {len(english_items)} English items)"
+            )
+
             # Batch translation prompt
             batch_texts = []
             for idx, item in enumerate(non_english_items):
-                text = item.get(text_field, '')
-                lang = item.get(language_field, 'unknown')
+                text = item.get(text_field, "")
+                lang = item.get(language_field, "unknown")
                 batch_texts.append(f"[ITEM_{idx}] ({lang}):\n{text}\n")
-            
+
             prompt = f"""Translate the following documents to English. Each document is marked with [ITEM_N].
 Return the translations in the same order, using the same [ITEM_N] markers.
 
@@ -489,52 +701,154 @@ Format:
 [ITEM_1]
 <translated text>
 """
-            
+
             response = await self.client.aio.models.generate_content(
                 model=self.model_id,
                 contents=prompt,
             )
-            
+
             response_text = (response.text or "").strip()
-            
+
             # Parse the batch response
             import re
-            item_pattern = r'\[ITEM_(\d+)\]\s*\n(.*?)(?=\[ITEM_|\Z)'
+
+            item_pattern = r"\[ITEM_(\d+)\]\s*\n(.*?)(?=\[ITEM_|\Z)"
             matches = re.findall(item_pattern, response_text, re.DOTALL)
-            
+
             # Map translations back to items
             for match in matches:
                 idx = int(match[0])
                 translated = match[1].strip()
                 if idx < len(non_english_items):
-                    non_english_items[idx]['translated_text'] = translated
-            
+                    non_english_items[idx]["translated_text"] = translated
+
             # Fallback: if parsing failed, translate one-by-one
             for item in non_english_items:
-                if 'translated_text' not in item:
-                    logger.warning(f"Batch translation failed for item, falling back to individual translation")
-                    text = item.get(text_field, '')
-                    lang = item.get(language_field, 'unknown')
-                    individual_result = await self.translate_text(text, target_language='English', source_language=lang)
-                    item['translated_text'] = individual_result.get('translated_text', text)
-            
+                if "translated_text" not in item:
+                    logger.warning(
+                        f"Batch translation failed for item, falling back to individual translation"
+                    )
+                    text = item.get(text_field, "")
+                    lang = item.get(language_field, "unknown")
+                    individual_result = await self.translate_text(
+                        text, target_language="English", source_language=lang
+                    )
+                    item["translated_text"] = individual_result.get(
+                        "translated_text", text
+                    )
+
             # Combine and return
             all_items = english_items + non_english_items
-            logger.info(f"Batch translation complete: {len(non_english_items)} items translated")
+            logger.info(
+                f"Batch translation complete: {len(non_english_items)} items translated"
+            )
             return all_items
-            
+
         except Exception as e:
             logger.error(f"Error in batch translation: {e}")
             # Fallback: mark all as untranslated
             for item in items:
-                if 'translated_text' not in item:
-                    item['translated_text'] = item.get(text_field, '')
+                if "translated_text" not in item:
+                    item["translated_text"] = item.get(text_field, "")
             return items
+
+    # ========================================
+    # APPLICATION SUMMARY FORMATTING
+    # ========================================
+    async def format_application_summary(self, application_text: str) -> str:
+        """
+        Extract structured information from an adoption application and format it
+        in a clean, ChatGPT-style summary format.
+
+        Args:
+            application_text: The raw adoption application text
+
+        Returns:
+            Formatted markdown summary of the application
+        """
+        prompt = f"""You are an expert adoption coordinator. Analyze this adoption application and create a comprehensive, well-structured summary.
+
+Application Text:
+{application_text}
+
+Create a professional summary in markdown format with the following structure:
+
+## Applicant Summary: [Extract Applicant Name]
+
+**Status:** Pending
+**Submitted:** [Today's date in format "Month DD, YYYY, at HH:MM AM/PM"]
+**Email:** [Extract email if present, otherwise use "Not provided"]
+
+## 📋 Applicant Overview
+
+[Write a comprehensive 2-3 sentence overview of the applicant, summarizing their motivation, living situation, experience, and what makes them a good fit for adopting a rescue animal.]
+
+## 🏡 Living Situation
+
+- **Residence Type:** [Extract: House/Apartment/Townhouse/Condo/Other]
+- **Yard:** [Yes with size if mentioned, or No]
+- **Other Pets:** [Yes - list types, or None]
+- **Household Members:** [Number of people, ages if mentioned]
+- **Home Ownership:** [Own/Rent/Other]
+
+## 💼 Work & Lifestyle
+
+- **Employment Status:** [Work from home/Office worker/Remote/Retired/etc.]
+- **Daily Schedule:** [Brief description of their typical day and time available for a dog]
+- **Activity Level:** [Active/Moderate/Low - based on their description]
+
+## 🐕 Experience & Preferences
+
+- **Dog Experience:** [Describe their previous experience with dogs]
+- **Training Experience:** [Any mention of training knowledge]
+- **Preferred Dog Type:** [Size, age, temperament preferences if mentioned]
+- **Special Accommodations:** [Any mention of ability to handle special needs, medical issues, behavioral challenges]
+
+## ⭐ Motivation & Commitment
+
+[Quote or summarize the most compelling parts of their motivation. Highlight commitment indicators like "long-term", "forever home", "family member", etc.]
+
+## ❗ Important Considerations
+
+[List any important points that require follow-up, potential concerns, or standout positive factors. If everything looks good, note "No concerns identified - strong application"]
+
+RULES:
+- Extract information accurately from the text
+- If information is not provided, write "Not specified" rather than making assumptions
+- Keep the tone professional but warm
+- Use emojis only in section headers (as shown above)
+- If the applicant name is not found, use "Applicant"
+- Format all sections consistently
+- Focus on facts from the application, not speculation
+- Highlight both strengths and any areas needing clarification"""
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+            )
+            formatted_summary = (response.text or "").strip()
+            logger.info("Generated formatted application summary")
+            return formatted_summary
+        except Exception as e:
+            logger.error(f"Error formatting application summary: {e}")
+            # Fallback to basic format
+            return f"""## Applicant Summary
+
+**Status:** Pending
+
+## 📋 Application Text
+
+{application_text[:500]}...
+
+*Note: Auto-formatting unavailable. Please review the full text above.*"""
 
     # ========================================
     # GENERAL TEXT GENERATION
     # ========================================
-    async def generate_response(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
+    async def generate_response(
+        self, prompt: str, context: Optional[Dict[str, Any]] = None
+    ) -> str:
         try:
             full_prompt = f"Context: {context}\n\n{prompt}" if context else prompt
             response = await self.client.aio.models.generate_content(
@@ -547,40 +861,80 @@ Format:
             return "I apologize, I'm having trouble processing your request right now."
 
     async def generate_applicant_details(
-        self,
-        query: str,
-        applicant_data: Dict[str, Any]
+        self, query: str, applicant_data: Dict[str, Any]
     ) -> str:
         """
         Generate detailed information about a specific applicant based on their full data.
+        Uses the same ChatGPT-style format as format_application_summary.
 
         Args:
             query: User's question about the applicant
             applicant_data: Full applicant data from Elasticsearch
 
         Returns:
-            Natural language response with applicant details
+            Natural language response with applicant details in structured format
         """
-        prompt = f"""You are a helpful rescue coordinator AI assistant. The user is asking about a specific applicant.
+        prompt = f"""You are an expert adoption coordinator. A user is asking about a specific applicant from your database.
 
 User question: "{query}"
 
-Applicant data from our database:
+Applicant data from database:
 {json.dumps(applicant_data, indent=2)}
 
-Provide a comprehensive, well-formatted response that answers the user's question using the data provided.
+Create a professional summary in markdown format with the following structure:
+
+# Applicant Summary: {applicant_data.get('applicant_name', 'Applicant')}
+
+**Status:** {applicant_data.get('status', 'Pending')}
+**Submitted:** {applicant_data.get('submitted_at', 'Date not available')}
+**Email:** {applicant_data.get('email', 'Not provided')}
+
+## Applicant Overview
+
+[Write a comprehensive 2-3 sentence overview of the applicant, summarizing their motivation, living situation, experience, and what makes them a good fit for adopting a rescue animal.]
+
+## Living Situation
+
+- **Residence Type:** {applicant_data.get('housing_type', 'Not specified')}
+- **Yard:** [Extract from has_yard field: Yes/No, include yard_size if available]
+- **Other Pets:** [Extract from has_other_pets and other_pets_description]
+- **Household Members:** [Extract from family_members or household_size]
+- **Home Ownership:** [Extract from housing_ownership or infer]
+
+## Work & Lifestyle
+
+- **Employment Status:** {applicant_data.get('employment_status', 'Not specified')}
+- **Daily Schedule:** [Describe their schedule and availability based on employment and other fields]
+- **Activity Level:** [Infer from lifestyle, preferences, or work situation]
+
+## Experience & Preferences
+
+- **Dog Experience:** {applicant_data.get('experience_level', 'Not specified')}
+- **Training Experience:** [Extract from previous_dog or training-related fields]
+- **Preferred Dog Type:** [Extract from preferences if available]
+- **Special Accommodations:** [Extract from behavioral preferences or special needs mentions]
+
+## Motivation & Commitment
+
+{applicant_data.get('motivation', 'Not provided')[:500]}
+
+[Add analysis: Highlight commitment indicators like "long-term", "forever home", "family member" if present in the motivation text]
+
+## Important Considerations
+
+[Based on all the data, list:
+1. Key strengths (2-3 points)
+2. Any areas needing follow-up or clarification
+3. Overall assessment: "Strong candidate" / "Recommended for interview" / "Needs additional review"]
 
 RULES:
-- Use markdown formatting for better readability (headers, lists, bold, etc.)
-- Structure your response with clear sections
-- Include relevant details from all fields in the data
-- If the user asks for specific information, focus on that but also provide context
-- Be warm, professional, and thorough
-- Highlight key strengths and important details about their application
-- If they have experience with dogs, living situation, or other relevant info, include it
-- Format addresses, phone numbers, and emails nicely
-
-Write a comprehensive response that would help a rescue coordinator understand this applicant."""
+- Extract information accurately from the provided data
+- If a field is missing or null, write "Not specified"
+- Keep the tone professional but warm
+- Use emojis only in section headers (as shown above)
+- Format all sections consistently
+- Highlight both strengths and any areas needing clarification
+- If the user's question was specific, ensure you address it in your response"""
 
         try:
             response = await self.client.aio.models.generate_content(
@@ -594,20 +948,36 @@ Write a comprehensive response that would help a rescue coordinator understand t
             logger.error(f"Error generating applicant details: {e}")
             # Fallback: create a simple formatted response
             name = applicant_data.get("applicant_name", "Unknown")
-            location = f"{applicant_data.get('city', '')}, {applicant_data.get('state', '')}".strip(", ")
+            location = f"{applicant_data.get('city', '')}, {applicant_data.get('state', '')}".strip(
+                ", "
+            )
             housing = applicant_data.get("housing_type", "Not specified")
             experience = applicant_data.get("experience_level", "Not specified")
             motivation = applicant_data.get("motivation", "Not provided")[:300]
+            email = applicant_data.get("email", "Not provided")
+            submitted = applicant_data.get("submitted_at", "Date not available")
 
-            return f"""## {name}
+            return f"""# Applicant Summary: {name}
 
-**Location:** {location}
-**Housing:** {housing}
-**Experience Level:** {experience}
+**Status:** Pending
+**Submitted:** {submitted}
+**Email:** {email}
 
-**Motivation:** {motivation}...
+## Applicant Overview
 
-*Note: This is basic information. For more details, please review the full application.*"""
+{name} has submitted an application to adopt a rescue dog. They are located in {location} and live in a {housing}.
+
+## Living Situation
+
+- **Residence Type:** {housing}
+- **Location:** {location}
+- **Experience Level:** {experience}
+
+## Motivation & Commitment
+
+{motivation}...
+
+*Note: Full database details available. This is a simplified view due to processing limitations.*"""
 
     async def detect_intent(self, message: str) -> Dict[str, Any]:
         try:
@@ -656,7 +1026,9 @@ Examples:
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1]).strip()
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            response_text = (
+                response_text.replace("```json", "").replace("```", "").strip()
+            )
 
             # Parse JSON response
             result = json.loads(response_text)
@@ -667,16 +1039,31 @@ Examples:
             if "filters" not in result:
                 result["filters"] = {}
 
-            logger.info(f"Intent detected: {result['type']}, filters: {result['filters']}")
+            logger.info(
+                f"Intent detected: {result['type']}, filters: {result['filters']}"
+            )
             return result
 
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing error in detect_intent: {e}")
             # Fallback to simple keyword detection
             message_lower = message.lower()
-            if any(word in message_lower for word in ["find", "search", "show me", "get me", "adopters", "applicants"]):
+            if any(
+                word in message_lower
+                for word in [
+                    "find",
+                    "search",
+                    "show me",
+                    "get me",
+                    "adopters",
+                    "applicants",
+                ]
+            ):
                 return {"type": "find_adopters", "filters": {}}
-            elif any(word in message_lower for word in ["analyze", "review", "evaluate", "application"]):
+            elif any(
+                word in message_lower
+                for word in ["analyze", "review", "evaluate", "application"]
+            ):
                 return {"type": "analyze_application", "filters": {}}
             return {"type": "general", "filters": {}}
         except Exception as e:
@@ -694,7 +1081,9 @@ Examples:
 
     async def _generate_in_region_async(self, prompt: str, region: str):
         # Create a *temporary* client bound to a different region for retry
-        temp_client = genai.Client(vertexai=True, project=self.project_id, location=region)
+        temp_client = genai.Client(
+            vertexai=True, project=self.project_id, location=region
+        )
         return await temp_client.aio.models.generate_content(
             model=self.model_id,
             contents=prompt,

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,11 +6,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 
 interface ViewDataModalProps {
   open: boolean;
@@ -22,7 +21,10 @@ interface ViewDataModalProps {
 export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps) => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [displayCount, setDisplayCount] = useState(10);
+  const [displayCount, setDisplayCount] = useState(20);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const loaderRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
   const toggleRow = (index: number) => {
     const newExpanded = new Set(expandedRows);
@@ -100,9 +102,48 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
 
   const hasMore = displayCount < filteredData.length;
 
-  const handleLoadMore = () => {
-    setDisplayCount(prev => Math.min(prev + 10, filteredData.length));
-  };
+  // Load more data when needed
+  const loadMore = useCallback(() => {
+    if (loadingRef.current || displayCount >= filteredData.length) return;
+
+    loadingRef.current = true;
+    setDisplayCount(prev => {
+      const newCount = Math.min(prev + 20, filteredData.length);
+      return newCount;
+    });
+
+    // Reset loading flag after a short delay
+    setTimeout(() => {
+      loadingRef.current = false;
+    }, 100);
+  }, [displayCount, filteredData.length]);
+
+  // Scroll event handler
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+      // Load more when scrolled past 80%
+      if (scrollPercentage > 0.8) {
+        loadMore();
+      }
+    };
+
+    // Initial check in case content is already at bottom
+    setTimeout(() => {
+      const { scrollHeight, clientHeight } = container;
+      if (scrollHeight <= clientHeight && displayCount < filteredData.length) {
+        loadMore();
+      }
+    }, 100);
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [loadMore, displayCount, filteredData.length]);
 
   const renderApplicationRow = (item: any, index: number) => {
     const isExpanded = expandedRows.has(index);
@@ -457,13 +498,13 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[80vh] p-0">
-        <DialogHeader className="p-6 pb-4">
+      <DialogContent className="max-w-3xl max-h-[85vh] p-0 flex flex-col">
+        <DialogHeader className="p-6 pb-4 flex-shrink-0">
           <DialogTitle>{getTitle()}</DialogTitle>
           <DialogDescription className="mt-1">
             {getDescription()}
           </DialogDescription>
-          
+
           {/* Search Input */}
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -473,14 +514,18 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setDisplayCount(10); // Reset pagination when searching
+                setDisplayCount(20); // Reset pagination when searching
               }}
               className="pl-9"
             />
           </div>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(80vh-200px)]">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden px-1"
+          style={{ minHeight: 0 }}
+        >
           {data.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               No data found. Upload some files to get started!
@@ -490,28 +535,31 @@ export const ViewDataModal = ({ open, onClose, data, type }: ViewDataModalProps)
               No results found for "{searchQuery}"
             </div>
           ) : (
-            <div className="divide-y divide-border">
-              {displayedData.map((item, index) => renderRow(item, index))}
-            </div>
+            <>
+              <div className="divide-y divide-border">
+                {displayedData.map((item, index) => renderRow(item, index))}
+              </div>
+              {hasMore && (
+                <div
+                  ref={loaderRef}
+                  className="p-4 text-center"
+                >
+                  <button
+                    onClick={loadMore}
+                    className="text-xs text-primary hover:underline cursor-pointer"
+                  >
+                    Load more ({filteredData.length - displayCount} remaining)
+                  </button>
+                </div>
+              )}
+            </>
           )}
-        </ScrollArea>
+        </div>
 
-        {/* Footer with Load More and Info */}
-        <div className="p-4 border-t border-border bg-muted/30 space-y-2">
-          {hasMore && (
-            <Button
-              onClick={handleLoadMore}
-              variant="outline"
-              className="w-full"
-            >
-              Load More ({filteredData.length - displayCount} remaining)
-            </Button>
-          )}
+        {/* Footer with Info */}
+        <div className="p-3 border-t border-border bg-muted/30 flex-shrink-0">
           <p className="text-xs text-muted-foreground text-center">
-            {hasMore ? 
-              `Showing ${displayedData.length} of ${filteredData.length} results` : 
-              'Click on any row to expand and view full details'
-            }
+            Showing {displayedData.length} of {filteredData.length} {type} • Click on any row to expand
           </p>
         </div>
       </DialogContent>

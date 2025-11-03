@@ -311,7 +311,7 @@ async def search_similar_outcomes(
 #   ~~~~worked! testing done by with postman.
 @router.get("", response_model=List[OutcomeResponse])
 async def list_outcomes(
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     outcome_filter: Optional[str] = Query(None, description="Filter by outcome type"),
 ):

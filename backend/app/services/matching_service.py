@@ -1,8 +1,10 @@
 from typing import Dict, Any, List, Optional
 from app.services.elasticsearch_service import es_service
 from app.core.config import get_settings
+from app.core.logger import setup_logger
 
 settings = get_settings()
+logger = setup_logger(__name__)
 
 
 class MatchingService:
@@ -13,8 +15,14 @@ class MatchingService:
 
     async def analyze_application(self, application_text: str) -> Dict[str, Any]:
         """
-        Analyze application and find patterns
+        Analyze application and find patterns.
+        Returns both formatted summary and detailed analysis data.
         """
+        from app.services.vertex_gemini_service import vertex_gemini_service
+
+        # Generate formatted summary using Gemini
+        formatted_summary = await vertex_gemini_service.format_application_summary(application_text)
+
         # Find similar past adopters (successes)
         similar_successes = await es_service.semantic_search(
             index=settings.outcomes_index,
@@ -43,6 +51,7 @@ class MatchingService:
         prediction = self._calculate_prediction(similar_successes["hits"], similar_failures["hits"])
 
         return {
+            "formatted_summary": formatted_summary,  # New: ChatGPT-style formatted summary
             "similar_successful_adopters": similar_successes["hits"][:3],
             "similar_failed_adopters": similar_failures["hits"][:3],
             "patterns": patterns,
