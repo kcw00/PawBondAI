@@ -280,8 +280,8 @@ PUT rescue-adoption-outcomes
 
 ### Infrastructure
 - **Google Cloud Platform** - Primary cloud provider
-- **Netlify** - Frontend hosting (planned)
-- **Cloud Run** - Backend containerized deployment (planned)
+- **Netlify** - Frontend hosting
+- **Cloud Run** - Backend containerized deployment
 - **Application Default Credentials** - GCP authentication
 
 ---
