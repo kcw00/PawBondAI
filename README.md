@@ -9,6 +9,16 @@
 
 ---
 
+## 📷 Live Demo
+
+Try it here: https://pawbondai.netlify.app/
+
+![ScreenRecording2025-11-04at12 59 38-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/3437900e-51e3-453d-93a7-eb26485162fb)
+![ezgif com-video-to-gif-converter (3)](https://github.com/user-attachments/assets/30e2874b-5639-498e-a3fb-f2559c1365e8)
+
+
+---
+
 ## 📋 Table of Contents
 
 - [Problem & Solution](#-problem--solution)
@@ -16,7 +26,6 @@
 - [Tech Stack](#-tech-stack)
 - [Architecture](#-architecture)
 - [Getting Started](#-getting-started)
-- [Deployment](#-deployment)
 - [API Documentation](#-api-documentation)
 - [Contributing](#-contributing)
 
@@ -393,90 +402,6 @@ python scripts/setup_indices.py
 # From backend directory
 python scripts/load_sample_data.py
 ```
-
----
-
-## 📦 Deployment
-
-### Frontend Deployment (Netlify)
-
-**Prerequisites:**
-- Netlify account ([Sign up](https://app.netlify.com/signup))
-- Netlify CLI installed: `npm install -g netlify-cli`
-
-**Deploy:**
-
-```bash
-cd frontend
-
-# Build the app
-npm run build
-
-# Login to Netlify
-netlify login
-
-# Deploy
-netlify deploy --prod
-
-# Follow prompts:
-# - Site name: pawbondai (or your choice)
-# - Publish directory: dist
-```
-
-**Set environment variables in Netlify:**
-
-1. Go to Site settings → Environment variables
-2. Add: `VITE_API_URL=https://your-backend-url.run.app/api/v1`
-
-Your frontend will be live at: `https://pawbondai.netlify.app`
-
-### Backend Deployment (Google Cloud Run)
-
-**Prerequisites:**
-- Google Cloud SDK installed ([Install](https://cloud.google.com/sdk/docs/install))
-- Docker installed ([Install](https://docs.docker.com/get-docker/))
-- GCP project with billing enabled
-
-**1. Create Dockerfile:**
-
-Already included at `/backend/Dockerfile`
-
-**2. Deploy to Cloud Run:**
-
-```bash
-cd backend
-
-# Authenticate with GCP
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-
-# Build and deploy
-gcloud run deploy pawbondai-backend \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  --set-env-vars VERTEX_AI_LOCATION=us-central1 \
-  --set-env-vars GEMINI_MODEL=gemini-1.5-flash \
-  --set-env-vars ELASTICSEARCH_URL=YOUR_ES_URL \
-  --set-env-vars ELASTICSEARCH_API_KEY=YOUR_ES_KEY \
-  --set-env-vars GCS_BUCKET_NAME=YOUR_BUCKET_NAME \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 300
-
-# Note: Replace YOUR_* with actual values
-```
-
-**3. Get your backend URL:**
-
-```bash
-gcloud run services describe pawbondai-backend --region us-central1 --format 'value(status.url)'
-```
-
-**4. Update frontend environment:**
-
-Update Netlify environment variable `VITE_API_URL` with your Cloud Run URL.
 
 ---
 
