@@ -80,7 +80,7 @@ A **RAG (Retrieval-Augmented Generation)** system built on **Elasticsearch** and
 
 ## 📊 Elasticsearch Architecture
 
-### Three Core Indices
+### Four Core Indices
 
 #### 1. **dogs** - Rescue Dog Profiles
 Semantic search on medical history, behavioral notes, and combined profiles for intelligent matching.
@@ -93,36 +93,19 @@ PUT dogs
 {
   "mappings": {
     "properties": {
-      "dog_id": {"type": "keyword"},
-      "name": {"type": "text"},
+      "name": {"type": "text", "fields": {"raw": {"type": "keyword"}}},
       "breed": {"type": "keyword"},
       "age": {"type": "integer"},
-      "age_display": {"type": "keyword"},
       "weight_kg": {"type": "float"},
       "sex": {"type": "keyword"},
-      "reproductive_status": {
-        "properties": {
-          "sterilized": {"type": "boolean"},
-          "procedure": {"type": "keyword"},
-          "date": {"type": "date"},
-          "location": {"type": "text"}
-        }
-      },
       "rescue_date": {"type": "date"},
-      "medical_history": {
+      "adoption_status": {"type": "keyword"},
+      "rescue_organization": {"type": "keyword"},
+      "behavioral_notes": {
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
-      "current_conditions": {"type": "text"},
-      "medications": {"type": "text"},
-      "vaccinations": {
-        "type": "nested",
-        "properties": {
-          "vaccine_name": {"type": "keyword"},
-          "date_administered": {"type": "date"}
-        }
-      },
-      "behavioral_notes": {
+      "medical_history": {
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
@@ -130,7 +113,8 @@ PUT dogs
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
-      "adoption_status": {"type": "keyword"},
+      "photos": {"type": "keyword"},
+      "language": {"type": "keyword"},
       "created_at": {"type": "date"},
       "updated_at": {"type": "date"}
     }
@@ -139,100 +123,127 @@ PUT dogs
 ```
 </details>
 
-#### 2. **veterinary_knowledge** - RAG Knowledge Base
-PDF documents chunked and embedded for precise veterinary information retrieval.
+#### 2. **applications** - Adoption Applications
+Hybrid search combining semantic analysis of motivation essays with structured filters for housing, experience, and pet compatibility.
 
 <details>
 <summary>View full schema</summary>
 
 ```json
-PUT veterinary_knowledge
+PUT applications
 {
   "mappings": {
     "properties": {
-      "attachment": {
-        "properties": {
-          "title": {"type": "text"},
-          "content_chunk": {
-            "type": "semantic_text",
-            "inference_id": "google_vertex_ai_embedding"
-          }
-        }
+      "applicant_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+      "phone": {"type": "keyword"},
+      "email": {"type": "keyword"},
+      "gender": {"type": "keyword"},
+      "address": {"type": "text"},
+      "housing_type": {"type": "keyword"},
+      "has_yard": {"type": "boolean"},
+      "yard_size_sqm": {"type": "integer"},
+      "family_members": {"type": "text"},
+      "all_family_members_agree": {"type": "boolean"},
+      "experience_level": {"type": "keyword"},
+      "has_other_pets": {"type": "boolean"},
+      "other_pets_description": {"type": "text"},
+      "motivation": {
+        "type": "semantic_text",
+        "inference_id": "google_vertex_ai_embedding"
       },
-      "filename": {"type": "keyword"},
-      "chunk_number": {"type": "integer"},
-      "total_chunks": {"type": "integer"},
-      "source": {"type": "keyword"},
+      "animal_applied_for": {"type": "keyword"},
+      "status": {"type": "keyword"},
+      "language": {"type": "keyword"},
+      "submitted_at": {"type": "date"}
+    }
+  }
+}
+```
+</details>
+
+#### 3. **medical_documents** - Veterinary Records
+OCR-processed medical documents with multilingual support and semantic search for finding similar cases.
+
+<details>
+<summary>View full schema</summary>
+
+```json
+PUT medical_documents
+{
+  "mappings": {
+    "properties": {
+      "title": {"type": "text", "fields": {"raw": {"type": "keyword"}}},
+      "document_type": {"type": "keyword"},
+      "content": {
+        "type": "semantic_text",
+        "inference_id": "google_vertex_ai_embedding"
+      },
+      "dog_id": {"type": "keyword"},
+      "dog_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+      "diagnosis": {"type": "text"},
+      "treatment": {"type": "text"},
+      "medications": {"type": "keyword"},
+      "procedures": {"type": "keyword"},
+      "veterinarian_name": {"type": "text"},
+      "clinic_name": {"type": "text"},
+      "clinic_location": {"type": "text"},
+      "document_date": {"type": "date"},
       "upload_date": {"type": "date"},
-      "processed_date": {"type": "date"},
-      "metadata": {
-        "type": "object",
-        "dynamic": true
-      }
+      "filename": {"type": "keyword"},
+      "file_type": {"type": "keyword"},
+      "file_size": {"type": "integer"},
+      "severity": {"type": "keyword"},
+      "category": {"type": "keyword"},
+      "tags": {"type": "keyword"},
+      "notes": {"type": "text"},
+      "language": {"type": "keyword"},
+      "created_at": {"type": "date"},
+      "updated_at": {"type": "date"}
     }
   }
 }
 ```
 </details>
 
-#### 3. **case_studies** - Rescue Network Knowledge Sharing
-Real medical cases with semantic search, geo-discovery, and privacy controls.
+#### 4. **rescue-adoption-outcomes** - Adoption Success Tracking
+ML-powered pattern learning from successful and failed adoptions for predictive matching.
 
 <details>
 <summary>View full schema</summary>
 
 ```json
-PUT case_studies
+PUT rescue-adoption-outcomes
 {
   "mappings": {
     "properties": {
-      "case_id": {"type": "keyword"},
-      "title": {"type": "text"},
-      "rescue_organization": {"type": "keyword"},
-      "organization_contact": {"type": "keyword"},
-      "date_published": {"type": "date"},
-      "visibility": {"type": "keyword"},
-      "is_shareable": {"type": "boolean"},
-      "geographic_location": {"type": "geo_point"},
-      "country": {"type": "keyword"},
-      "region": {"type": "keyword"},
-      "patient_species": {"type": "keyword"},
-      "patient_breed": {"type": "keyword"},
-      "patient_age_years": {"type": "integer"},
-      "patient_age_months": {"type": "integer"},
-      "patient_age_category": {"type": "keyword"},
-      "patient_sex": {"type": "keyword"},
-      "patient_weight_kg": {"type": "float"},
-      "patient_weight_category": {"type": "keyword"},
-      "is_juvenile": {"type": "boolean"},
-      "is_geriatric": {"type": "boolean"},
-      "presenting_complaint": {
+      "outcome_id": {"type": "keyword"},
+      "dog_id": {"type": "keyword"},
+      "application_id": {"type": "keyword"},
+      "outcome": {"type": "keyword"},
+      "outcome_reason": {
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
-      "clinical_history": {"type": "text"},
-      "physical_examination": {"type": "text"},
-      "diagnostic_tests": {"type": "text"},
-      "diagnosis": {
+      "success_factors": {
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
-      "treatment_plan": {"type": "text"},
-      "outcome": {"type": "text"},
-      "follow_up": {"type": "text"},
-      "combined_case_text": {
+      "failure_factors": {
         "type": "semantic_text",
         "inference_id": "google_vertex_ai_embedding"
       },
-      "learning_points": {"type": "text"},
-      "tags": {"type": "keyword"},
-      "disease_category": {"type": "keyword"},
-      "urgency_level": {"type": "keyword"},
-      "references": {"type": "text"},
-      "estimated_cost": {"type": "float"},
-      "cost_breakdown": {"type": "text"},
+      "follow_up_notes": {"type": "text"},
+      "adoption_date": {"type": "date"},
+      "return_date": {"type": "date"},
+      "follow_up_date": {"type": "date"},
+      "days_until_return": {"type": "integer"},
+      "adopter_satisfaction_score": {"type": "integer"},
+      "dog_difficulty_level": {"type": "keyword"},
+      "adopter_experience_level": {"type": "keyword"},
+      "match_score_at_adoption": {"type": "float"},
+      "language": {"type": "keyword"},
       "created_at": {"type": "date"},
-      "updated_at": {"type": "date"}
+      "created_by": {"type": "keyword"}
     }
   }
 }
@@ -473,54 +484,117 @@ Update Netlify environment variable `VITE_API_URL` with your Cloud Run URL.
 
 ### Key Endpoints
 
-#### Chat & Search
+#### 💬 Chat & AI Assistant
 
 ```http
 POST /api/v1/chat/message
 Content-Type: application/json
 
 {
-  "message": "Find experienced adopters with yards",
+  "message": "Find experienced adopters with yards for anxious dogs",
   "context": {
     "session_id": "uuid"
-  }
+  },
+  "dog_id": "optional_dog_id"
 }
 ```
-
-#### Application Analysis
 
 ```http
 POST /api/v1/chat/analyze-application
 Content-Type: application/json
 
 {
-  "application_text": "I've had dogs my whole life..."
+  "application_text": "I've had dogs my whole life and work from home..."
 }
 ```
 
-#### Dog Profiles
+#### 🐕 Dog Profiles
 
 ```http
-GET /api/v1/dogs/{dog_id}
-GET /api/v1/dogs?limit=10&offset=0
-POST /api/v1/dogs
+# CRUD Operations
+GET    /api/v1/dogs?limit=10&offset=0
+GET    /api/v1/dogs/{dog_id}
+POST   /api/v1/dogs
+PUT    /api/v1/dogs/{dog_id}
+DELETE /api/v1/dogs/{dog_id}
+
+# Search & Matching
+POST   /api/v1/dogs/search              # Semantic search
+GET    /api/v1/dogs/{dog_id}/matches    # Find compatible adopters
+POST   /api/v1/dogs/bulk-upload         # CSV bulk upload
+
+# Medical History
+GET    /api/v1/dogs/{dog_id}/history
 ```
 
-#### Medical Documents
+#### 📝 Applications
 
 ```http
-POST /api/v1/medical-documents/upload
-GET /api/v1/medical-documents?dog_id={id}
+# CRUD Operations
+GET    /api/v1/applications?limit=10&offset=0
+GET    /api/v1/applications/{application_id}
+POST   /api/v1/applications
+PUT    /api/v1/applications/{application_id}
+DELETE /api/v1/applications/{application_id}
+
+# Search & Bulk Upload
+POST   /api/v1/applications/search      # Semantic search on motivation
+POST   /api/v1/applications/csv/validate
+POST   /api/v1/applications/csv/preview
+POST   /api/v1/applications/csv/upload
 ```
 
-#### Analytics
+#### 🏥 Medical Documents
 
 ```http
-GET /api/v1/analytics/adoption-trends
-GET /api/v1/analytics/medical-conditions
+POST   /api/v1/medical-documents/upload
+GET    /api/v1/medical-documents?dog_id={id}
+GET    /api/v1/medical-documents/{document_id}
+GET    /api/v1/medical-documents/search/content
+DELETE /api/v1/medical-documents/{document_id}
 ```
 
-**Full API documentation:** Visit `/docs` on your running backend
+#### 📊 Adoption Outcomes
+
+```http
+# Outcome Tracking
+GET    /api/v1/outcomes?limit=10
+POST   /api/v1/outcomes
+GET    /api/v1/outcomes/{outcome_id}
+GET    /api/v1/outcomes/dog/{dog_id}
+
+# Statistics & Pattern Learning
+GET    /api/v1/outcomes/stats           # Success rate calculations
+GET    /api/v1/outcomes/successful
+GET    /api/v1/outcomes/failed
+POST   /api/v1/outcomes/search          # Semantic pattern search
+
+# Bulk Upload
+POST   /api/v1/outcomes/csv/upload
+```
+
+#### 📈 Analytics & Predictions
+
+```http
+GET    /api/v1/analytics/success-rates
+POST   /api/v1/analytics/predict        # Predict adoption success
+POST   /api/v1/analytics/sentiment      # Analyze motivation text
+GET    /api/v1/analytics/dashboard
+GET    /api/v1/analytics/index-stats
+```
+
+#### 💭 Chat History
+
+```http
+POST   /api/v1/chat/history/new
+GET    /api/v1/chat/history/sessions?limit=10
+GET    /api/v1/chat/history/{session_id}
+PATCH  /api/v1/chat/history/{session_id}/name
+DELETE /api/v1/chat/history/{session_id}
+POST   /api/v1/chat/history/save
+```
+
+**Full API documentation:** Visit `/docs` on your running backend (Swagger UI at http://localhost:8000/docs)
 
 ---
 
