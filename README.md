@@ -266,6 +266,7 @@ PUT rescue-adoption-outcomes
 - **Python 3.11+** - Core programming language
 - **Elasticsearch 8.x** - Search engine with semantic_text support
 - **Google Vertex AI** - Gemini 1.5 for embeddings and chat
+- **BigQuery** - Data warehousing and ML predictions
 - **Google Cloud Storage** - Chat history persistence
 - **Pydantic** - Data validation and settings management
 
