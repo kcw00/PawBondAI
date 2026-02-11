@@ -23,8 +23,8 @@ Try it here: https://pawbondai.netlify.app/
 
 - [Problem & Solution](#-problem--solution)
 - [Key Features](#-key-features)
+- [Architecture](#architecture)
 - [Tech Stack](#-tech-stack)
-- [Architecture](#-architecture)
 - [Getting Started](#-getting-started)
 - [API Documentation](#-api-documentation)
 - [Contributing](#-contributing)
@@ -51,6 +51,10 @@ A **RAG (Retrieval-Augmented Generation)** system built on **Elasticsearch** and
 ✅ **Veterinary Knowledge Base** - Instant access to medical literature and similar case studies  
 ✅ **Multilingual Support** - Translation and entity extraction for international collaboration  
 ✅ **Predictive Analytics** - Success prediction based on historical adoption outcomes
+
+## Architecture
+![alt text](pawbondai.png)
+
 
 ## ✨ Key Features
 
